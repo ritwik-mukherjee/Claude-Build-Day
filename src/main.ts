@@ -82,9 +82,11 @@ function setHp(side: "left" | "right", v: number) {
     el.classList.add("hit");
   }
 }
-bus.on(EV.HP, ({ player, enemy }: { player: number; enemy: number }) => {
+bus.on(EV.HP, ({ player, enemy, enemyHp, enemyMax }: { player: number; enemy: number; enemyHp?: number; enemyMax?: number }) => {
   setHp("left", player);
   setHp("right", enemy);
+  const bh = document.querySelector("#boss-hp");
+  if (bh && enemyHp !== undefined) bh.textContent = `${enemyHp} / ${enemyMax} HP`;
 });
 
 bus.on(EV.FUEL, (f: number) => {

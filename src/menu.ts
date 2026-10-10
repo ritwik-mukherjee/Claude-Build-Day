@@ -421,7 +421,7 @@ export function initMenu(game: Phaser.Game) {
       .map((a, i) => `<div><b>${i === 0 ? "1/F" : i + 1}</b> ${a.desc}</div>`)
       .join("");
     if (!state.carryPending) $("#lp-loadout").innerHTML = "<i>nothing bolted on yet — try a prompt or the roulette</i>";
-    $(".hp.right .hp-sub").textContent = mode === "lab" ? "TRAINING DUMMY // CANNOT DIE" : "HOSTILE // FOUNDRY GUARDIAN";
+    $(".hp.right .hp-sub").innerHTML = `${mode === "lab" ? "TRAINING DUMMY // CANNOT DIE" : "HOSTILE // FOUNDRY GUARDIAN"} · <span id="boss-hp"></span>`;
     renderChips(mode === "lab" ? LAB_PROMPTS : ARENA_PROMPTS);
     showControlsOnce();
     void def;

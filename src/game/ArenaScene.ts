@@ -176,8 +176,7 @@ export class ArenaScene extends Phaser.Scene {
     });
     if (this.cfg.mode === "menu") {
       for (const p of this.goblin.parts) p.setVisible(false);
-      this.spider.body.setVisible(false);
-      this.spider.gfx.setVisible(false);
+      this.spider.setVisible(false);
     }
     // 2.5D depth cues: contact shadows + colored backlights (cheap sprites updated per frame)
     this.shadows = [0, 1].map(() => this.add.image(0, 0, "shadow").setDepth(12));
@@ -1001,7 +1000,7 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   emitHp() {
-    bus.emit(EV.HP, { player: this.goblin.hp / this.goblin.maxHp, enemy: this.spider.hp / this.spider.maxHp });
+    bus.emit(EV.HP, { player: this.goblin.hp / this.goblin.maxHp, enemy: this.spider.hp / this.spider.maxHp, enemyHp: Math.ceil(this.spider.hp), enemyMax: this.spider.maxHp });
   }
 
   private respawnGoblin() {
@@ -1046,8 +1045,7 @@ export class ArenaScene extends Phaser.Scene {
         sy = this.spider.y;
       for (let i = 0; i < 6; i++) this.time.delayedCall(i * 180, () => this.fx.explosion(sx + Phaser.Math.Between(-60, 60), sy + Phaser.Math.Between(-40, 40), 1.5 + i * 0.2));
       this.time.delayedCall(1200, () => {
-        this.spider.body.setVisible(false);
-        this.spider.gfx.setVisible(false);
+        this.spider.wreck(); // collapsed, dark wreck remains
         this.fx.explosion(sx, sy, 3);
         bus.emit(EV.GAME_OVER, this.gameOverPayload("player"));
       });

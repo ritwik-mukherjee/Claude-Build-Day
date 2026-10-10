@@ -170,6 +170,65 @@ export function buildTextures(scene: Phaser.Scene) {
     for (const [x, y] of [[96, 34], [96, 64], [30, 22], [74, 22], [30, 70], [74, 70]]) g.fillStyle(0xaab6c0).fillCircle(x, y, 2);
   });
 
+  // ---- Boss (Arachnotron v9): layered, shaded parts assembled at runtime ----
+  tex(scene, "boss_body", 176, 112, (g) => {
+    // rear abdomen: stacked armour plates with top-lit shading + cyan rim
+    g.fillStyle(0x0c0e12).fillEllipse(70, 58, 136, 100);
+    g.fillStyle(0x1e2228).fillEllipse(70, 56, 128, 90);
+    g.fillStyle(0x2c323a).fillEllipse(70, 50, 116, 72);
+    for (let i = 0; i < 4; i++) {
+      g.fillStyle(i % 2 ? 0x333a44 : 0x3c4450).fillEllipse(70 - i * 6, 40 + i * 9, 104 - i * 18, 20);
+      g.lineStyle(2, 0x0c0e12, 0.9).strokeEllipse(70 - i * 6, 40 + i * 9, 104 - i * 18, 20);
+    }
+    g.lineStyle(3, 0x26f0ff, 0.55).beginPath().arc(70, 56, 63, Math.PI * 1.08, Math.PI * 1.75).strokePath(); // rim light
+    g.fillStyle(0x07080a).fillCircle(66, 58, 17); // reactor socket (core sprite sits here)
+    g.lineStyle(3, 0x5a6470).strokeCircle(66, 58, 17);
+    // heat vents with orange glow
+    for (let i = 0; i < 3; i++) {
+      g.fillStyle(0x07080a).fillRoundedRect(22 + i * 12, 70 + i * 3, 8, 16, 2);
+      g.fillStyle(0xff6a20, 0.7).fillRect(24 + i * 12, 78 + i * 3, 4, 6);
+    }
+    // forward cephalothorax / turret mount
+    g.fillStyle(0x0c0e12).fillRoundedRect(112, 26, 62, 56, 14);
+    g.fillStyle(0x3a424c).fillRoundedRect(115, 29, 56, 50, 12);
+    g.fillStyle(0x4c5662).fillRoundedRect(118, 31, 50, 16, 8);
+    g.fillStyle(0xffc83d).fillRect(118, 70, 50, 5); // hazard trim
+    g.fillStyle(0x111111);
+    for (let x = 118; x < 168; x += 10) g.fillTriangle(x, 75, x + 5, 70, x + 10, 70);
+    // mandibles
+    g.fillStyle(0x8a949e).fillTriangle(160, 76, 176, 96, 166, 72).fillTriangle(146, 78, 156, 102, 152, 74);
+    g.fillStyle(0xaab6c0);
+    for (const [x, y] of [[122, 36], [164, 36], [40, 34], [100, 34], [30, 78], [108, 80]]) g.fillCircle(x, y, 2.2);
+  });
+  tex(scene, "boss_core", 40, 40, (g) => {
+    g.fillStyle(0xffffff, 0.15).fillCircle(20, 20, 19);
+    g.fillStyle(0xff3040).fillCircle(20, 20, 13);
+    g.fillStyle(0xff9a9a).fillCircle(20, 20, 7);
+    g.fillStyle(0xffffff).fillCircle(17, 17, 3);
+  });
+  tex(scene, "boss_optic", 30, 30, (g) => {
+    g.fillStyle(0x07080a).fillCircle(15, 15, 14);
+    g.lineStyle(2, 0x6a7480).strokeCircle(15, 15, 13);
+    g.fillStyle(0x3a0a10).fillCircle(15, 15, 9);
+  });
+  tex(scene, "boss_pupil", 12, 12, (g) => {
+    g.fillStyle(0xff2030).fillCircle(6, 6, 5);
+    g.fillStyle(0xffd0d0).fillCircle(5, 5, 2);
+  });
+  tex(scene, "boss_cannon", 76, 24, (g) => {
+    g.fillStyle(0x0c0e12).fillRoundedRect(0, 4, 70, 16, 5);
+    g.fillStyle(0x4a5460).fillRoundedRect(2, 6, 64, 12, 4);
+    g.fillStyle(0x6a7480).fillRect(4, 7, 60, 3);
+    for (const x of [16, 30, 44]) g.fillStyle(0x1a1d22).fillRect(x, 5, 4, 14);
+    g.fillStyle(0x1a1d22).fillRoundedRect(62, 2, 14, 20, 3); // muzzle
+    g.fillStyle(0xff3040, 0.9).fillRect(72, 8, 3, 8);
+  });
+  tex(scene, "bolt", 72, 14, (g) => {
+    for (let i = 7; i > 0; i--) g.fillStyle(0xff2030, 0.12).fillRoundedRect(36 - i * 5, 7 - i, i * 10, i * 2, i);
+    g.fillStyle(0xffd0d0).fillRoundedRect(8, 5, 58, 4, 2);
+    g.fillStyle(0xffffff).fillRoundedRect(30, 6, 34, 2, 1);
+  });
+
   // ---- Arena ----
   tex(scene, "crate", 56, 56, (g) => {
     g.fillStyle(0x3b2a1a).fillRect(0, 0, 56, 56);
