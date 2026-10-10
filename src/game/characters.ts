@@ -150,7 +150,7 @@ export const IMPORTED: CharacterDef[] = [
     name: "HULK",
     title: "Gamma-Powered Wrecker",
     bio: "Very large. Very green. Very unconvinced by the concept of indoor voices.",
-    quote: "“Real 3D model in the showcase + Mutation Chamber; articulated 2D rig in the arena.”",
+    quote: "“Real 3D model in the showcase; arena ragdoll uses sprites rendered from the same model.”",
     tex: "xh",
     accent: "#5dbb3a",
     dims: { torso: [52, 60], head: 20, headOffset: 0, uarm: [18, 34], farm: [19, 34], thigh: [20, 32], shin: [22, 36] },
@@ -163,7 +163,6 @@ export const IMPORTED: CharacterDef[] = [
     backTint: 0xa8b0a0,
     special: { id: "hulk_smash", name: "HULK SMASH", short: "SMASH", desc: "Leap toward the cursor and slam down: huge shockwave, launches the spider.", cooldown: 5 },
     extra: [{ id: "thunderclap", name: "THUNDERCLAP", short: "CLAP", desc: "Clap shockwave in a forward cone: knockback, brief stun, shatters lasers.", cooldown: 6 }],
-    modelPending: true,
     stats: { speed: 3, power: 5, armor: 5, chaos: 4 },
   },
   {

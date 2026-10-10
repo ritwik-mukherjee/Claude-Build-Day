@@ -83,6 +83,9 @@ export class ArenaScene extends Phaser.Scene {
 
   preload() {
     preloadVfx(this); // Kenney CC0 sprites (skipped once cached; procedural fallbacks if missing)
+    // ragdoll part sprites pre-rendered from the real Hulk glTF (scripts/bake); if any fail to
+    // load, buildCharacterTextures falls back to the procedural prototype rig for that key
+    for (const p of ["torso", "head", "uarm", "farm", "thigh", "shin"]) if (!this.textures.exists(`xh_${p}`)) this.load.image(`xh_${p}`, `${import.meta.env.BASE_URL}assets/sprites/hulk/${p}.png`);
   }
 
   init(data: Partial<RoundCfg>) {
