@@ -1,7 +1,7 @@
 // Character select screen, mode switching, special-ability button, effects toggle.
 import type Phaser from "phaser";
 import { bus } from "./game/bus";
-import { CHARACTERS, charById, paintPortrait, type CharacterDef, type CharacterId } from "./game/characters";
+import { abilitiesOf, CHARACTERS, IMPORTED, charById, paintPortrait, type CharacterDef, type CharacterId } from "./game/characters";
 import { Q } from "./game/quality";
 import { ROULETTE } from "../shared/fallback";
 import { CHALLENGES } from "./game/challenges";
@@ -46,6 +46,9 @@ export const state = {
 };
 
 let selected = 0;
+let bayOpen = false;
+/** main roster + (optionally) imported characters whose models are still pending */
+const roster = () => (bayOpen ? [...CHARACTERS, ...IMPORTED] : CHARACTERS);
 
 let spinning = false;
 /** Mutation roulette: picks a curated, fully supported prompt, reveals it, then submits it normally. */
@@ -104,8 +107,9 @@ function renderChips(list: [string, string][]) {
 }
 
 function select(i: number) {
-  selected = (i + CHARACTERS.length) % CHARACTERS.length;
-  const def = CHARACTERS[selected];
+  const list = roster();
+  selected = (i + list.length) % list.length;
+  const def = list[selected];
   document.querySelectorAll<HTMLElement>(".card").forEach((c, k) => c.classList.toggle("on", k === selected));
   const sel = $("#select");
   sel.style.setProperty("--accent", def.accent);
@@ -191,30 +195,50 @@ export function initMenu(game: Phaser.Game) {
   $("#vc-fighters").addEventListener("click", () => start("menu"));
   $("#vc-lab").addEventListener("click", () => start("lab"));
 
-  const roster = $("#roster");
+  const rosterEl = $("#roster");
   let painted = false;
-  CHARACTERS.forEach((def, i) => {
+  const addCard = (def: CharacterDef, i: number) => {
     const card = document.createElement("button");
-    card.className = "card";
+    card.className = def.modelPending ? "card proto" : "card";
     card.style.setProperty("--accent", def.accent);
     const bars = (["speed", "power", "armor", "chaos"] as const)
       .map((k) => `<div class="stat"><span>${k.toUpperCase()}</span><b>${"<i></i>".repeat(def.stats[k])}${"<i class=off></i>".repeat(5 - def.stats[k])}</b></div>`)
       .join("");
     card.innerHTML = `<div class="pf"><canvas width="220" height="230"></canvas></div>
       <div class="cn">${def.name}</div><div class="ct">${def.title}</div>
-      <div class="stats">${bars}</div><div class="csp">★ ${def.special.name}</div>`;
+      <div class="stats">${bars}</div><div class="csp">★ ${abilitiesOf(def).map((a) => a.short ?? a.name).join(" · ")}</div>
+      ${def.modelPending ? `<div class="pending">MODEL PENDING · PROTOTYPE RIG</div>` : ""}`;
     card.addEventListener("mouseenter", () => select(i));
     card.addEventListener("focus", () => select(i));
     card.addEventListener("click", () => {
       select(i);
       start("arena", def.id);
     });
-    roster.appendChild(card);
-  });
+    rosterEl.appendChild(card);
+    return card;
+  };
+  CHARACTERS.forEach(addCard);
   select(0);
+  // Prototype bay: imported characters (abilities ready, real models not yet in the repo)
+  const bayBtn = document.createElement("button");
+  bayBtn.id = "bay-btn";
+  bayBtn.textContent = `▸ PROTOTYPE BAY · ${IMPORTED.length} imported fighters (models pending)`;
+  $(".sel-foot").after(bayBtn);
+  bayBtn.addEventListener("click", () => {
+    bayOpen = !bayOpen;
+    bayBtn.textContent = bayOpen ? "▾ HIDE PROTOTYPE BAY" : `▸ PROTOTYPE BAY · ${IMPORTED.length} imported fighters (models pending)`;
+    rosterEl.querySelectorAll(".card.proto").forEach((c) => c.remove());
+    if (bayOpen)
+      IMPORTED.forEach((d, k) => {
+        const c = addCard(d, CHARACTERS.length + k);
+        paintPortrait(game, d, c.querySelector("canvas") as HTMLCanvasElement);
+      });
+    select(bayOpen ? CHARACTERS.length : 0);
+    bayBtn.blur();
+  });
 
-  $("#go-fight").addEventListener("click", () => start("arena", CHARACTERS[selected].id));
-  $("#go-lab").addEventListener("click", () => start("lab", CHARACTERS[selected].id));
+  $("#go-fight").addEventListener("click", () => start("arena", roster()[selected].id));
+  $("#go-lab").addEventListener("click", () => start("lab", roster()[selected].id));
   $("#btn-menu").addEventListener("click", () => start("menu"));
   const switchMode = () => bus.emit("start", { mode: state.mode === "lab" ? "arena" : "lab", char: state.char, challenge: state.challenge, carry: true });
   $("#btn-mode").addEventListener("click", switchMode);
@@ -224,7 +248,13 @@ export function initMenu(game: Phaser.Game) {
       ? list.map((l) => `<div>▸ ${l.replace(/_/g, " ").replace("(", " <small>(").replace(/\)$/, ")</small>")}</div>`).join("")
       : "<i>nothing bolted on yet — try a prompt or the roulette</i>";
   });
-  $("#special").addEventListener("click", () => bus.emit("special"));
+  // ability strip: one clickable button per character ability (1/F, 2, 3)
+  $("#abilities").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+    if (!b) return;
+    bus.emit("special", Number(b.dataset.slot));
+    b.blur();
+  });
   const renderPers = () => document.querySelectorAll<HTMLButtonElement>("#dir-pers button").forEach((b) => b.classList.toggle("on", b.dataset.p === state.personality));
   document.querySelectorAll<HTMLButtonElement>("#dir-pers button").forEach((b) =>
     b.addEventListener("click", () => {
@@ -270,8 +300,8 @@ export function initMenu(game: Phaser.Game) {
     if (state.mode === "menu") {
       if (e.key === "ArrowRight" || e.key === "d") select(selected + 1);
       else if (e.key === "ArrowLeft" || e.key === "a") select(selected - 1);
-      else if (e.key === "Enter") start("arena", CHARACTERS[selected].id);
-      else if (e.key === "l" || e.key === "L") start("lab", CHARACTERS[selected].id);
+      else if (e.key === "Enter") start("arena", roster()[selected].id);
+      else if (e.key === "l" || e.key === "L") start("lab", roster()[selected].id);
       e.stopImmediatePropagation();
       if (e.key === "Enter" || e.key === " ") e.preventDefault();
       return;
@@ -294,22 +324,30 @@ export function initMenu(game: Phaser.Game) {
     if (!painted) {
       // textures exist once the scene has run create()
       painted = true;
-      document.querySelectorAll<HTMLCanvasElement>(".card canvas").forEach((c, k) => paintPortrait(game, CHARACTERS[k], c));
+      document.querySelectorAll<HTMLCanvasElement>(".card canvas").forEach((c, k) => paintPortrait(game, roster()[k], c));
     }
     $("#clock").textContent = "";
     if (mode === "menu") {
-      select(CHARACTERS.findIndex((c) => c.id === char));
+      if (IMPORTED.some((c) => c.id === char) && !bayOpen) bayBtn.click();
+      select(roster().findIndex((c) => c.id === char));
       return;
     }
     const d = charById(char);
-    $(".hp.left .hp-name").innerHTML = `${d.name.replace(" ", " <span>")}</span>`;
+    $(".hp.left .hp-name").innerHTML = d.name.includes(" ") ? `${d.name.replace(" ", " <span>")}</span>` : `${d.name}${d.modelPending ? " <span>PROTO RIG</span>" : ""}`;
     $(".hp.left").style.setProperty("--accent", d.accent);
-    $("#special .sp-name").textContent = d.special.name;
+    const abl = abilitiesOf(d);
+    const strip = $("#abilities");
+    strip.className = abl.length > 1 ? "multi" : "";
+    strip.innerHTML = abl
+      .map((a, i) => `<button class="ab ready" data-slot="${i}" title="${a.name}: ${a.desc}"><span class="sp-key">${i === 0 ? "1·F" : i + 1}</span><span class="sp-name">${abl.length > 1 ? a.short ?? a.name : a.name}</span><i></i><u></u></button>`)
+      .join("");
     $("#btn-mode").textContent = mode === "lab" ? "▶ ARENA" : "⚗ LAB";
     $("#btn-mode").title = mode === "lab" ? "Take this build into the arena" : "Open the Character Lab (keeps your build)";
     $("#lp-name").textContent = `${d.name} — ${d.title}`;
-    $("#lp-sp").textContent = d.special.name;
-    $("#lp-sp-desc").textContent = d.special.desc;
+    $("#lp-sp").textContent = abilitiesOf(d).map((a) => a.name).join(" · ");
+    $("#lp-sp-desc").innerHTML = abilitiesOf(d)
+      .map((a, i) => `<div><b>${i === 0 ? "1/F" : i + 1}</b> ${a.desc}</div>`)
+      .join("");
     if (!state.carryPending) $("#lp-loadout").innerHTML = "<i>nothing bolted on yet — try a prompt or the roulette</i>";
     $(".hp.right .hp-sub").textContent = mode === "lab" ? "TRAINING DUMMY // CANNOT DIE" : "HOSTILE // FOUNDRY GUARDIAN";
     renderChips(mode === "lab" ? LAB_PROMPTS : ARENA_PROMPTS);
@@ -317,15 +355,24 @@ export function initMenu(game: Phaser.Game) {
     void def;
   });
 
-  bus.on("special-denied", () => {
-    const b = $("#special");
+  bus.on("special-denied", (slot = 0) => {
+    const b = document.querySelector<HTMLElement>(`#abilities [data-slot="${slot}"]`);
+    if (!b) return;
     b.classList.remove("denied");
     void b.offsetWidth;
     b.classList.add("denied");
   });
-  bus.on("special-cd", (f: number) => {
-    const b = $("#special");
-    (b.querySelector("i") as HTMLElement).style.transform = `scaleX(${Math.max(0, f)})`;
-    b.classList.toggle("ready", f <= 0);
+  bus.on("ability-cd", (st: { cds: number[]; axeOut: boolean; rage: boolean; copter: number }) => {
+    const ids = abilitiesOf(charById(state.char)).map((a) => a.id);
+    document.querySelectorAll<HTMLElement>("#abilities .ab").forEach((b, i) => {
+      const f = st.cds[i] ?? 0;
+      (b.querySelector("i") as HTMLElement).style.transform = `scaleX(${Math.max(0, f)})`;
+      b.classList.toggle("ready", f <= 0);
+      // active-state indicators: axe in flight, rage running, copter battery
+      const id = ids[i];
+      const active = (id === "leviathan_axe" && st.axeOut) || (id === "spartan_rage" && st.rage) || (id === "bamboo_copter" && st.copter > 0);
+      b.classList.toggle("active", active);
+      (b.querySelector("u") as HTMLElement).style.transform = `scaleX(${id === "bamboo_copter" ? st.copter : 0})`;
+    });
   });
 }

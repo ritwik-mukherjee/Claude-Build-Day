@@ -81,6 +81,20 @@ Demo prompts (also one-click chips under the console):
 Manual console commands go through the **same** action handlers as LLM plans:
 `/attach shield size=2 color=red`, `/modify chain_weapon mass=2`, `/remove rocket_booster`.
 
+## Imported-character abilities (models pending)
+
+`src/game/abilities.ts` implements abilities for two imported characters. They are registered against the stable ids `kratos` and `doraemon` in `IMPORTED` (`characters.ts`) and are independent of any model files.
+
+**The models are not in the repo yet.** Until they are, these characters use a clearly labelled neutral **prototype rig** and appear only in the select screen's **Prototype Bay**, not in the main roster. All abilities use the existing Matter world, damage and impact paths, and effects. They are bounded and clean up after themselves.
+
+| Key | Kratos | Doraemon |
+|---|---|---|
+| **1 / F** | **Leviathan Axe:** a sensor projectile that damages on collision with knockback, lodges in walls and platforms, then recalls along an arc and can hit again on the way back. Only one axe at a time, with a 3.2 s hard lifetime cap. | **Air Cannon:** a compressed-air blast with large knockback and light damage. At most 3 in flight. |
+| **2** | **Spartan Rage:** 6 s. Enters with a ground slam; punches become shockwave hits; 1.4× damage dealt, half damage taken, 1.25× speed. Everything is restored exactly on expiry. | **Bamboo Copter:** up to 5 s of controlled hover (hold W or Space to climb), then a capped safe-landing fall. Stops on defeat. |
+| **3** | – | **Anywhere Door:** door opens, the fighter is hidden and frozen, the real physics bodies (including equipped weapons) are teleported to a validated safe spot, then the door closes. The spot is on a platform, in bounds, not under a catwalk, clear of bodies and away from the spider. Unsafe use (mid-air, or no valid exit) is rejected without charging the cooldown. |
+
+The HUD ability strip shows clickable buttons with cooldowns and active states (axe in flight, rage running, copter battery). Mutations still work on these characters. Hulk has no abilities yet.
+
 ## Three.js Mutation Chamber
 
 `src/chamber/Chamber.ts` is lazy-loaded (a separate ~146 KB gzipped chunk) the first time a mutation plays. Once a plan has been validated, the sequence is:

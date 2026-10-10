@@ -11,6 +11,8 @@ import { buildTextures } from "./textures";
 import { buildCharacterTextures, charById, type CharacterId } from "./characters";
 import { Q } from "./quality";
 import { challengeById } from "./challenges";
+import { Abilities } from "./abilities";
+import { abilitiesOf } from "./characters";
 import { MB } from "./util";
 import { state as menuState } from "../menu";
 
@@ -65,6 +67,8 @@ export class ArenaScene extends Phaser.Scene {
   shadows: Phaser.GameObjects.Image[] = [];
   backlights: Phaser.GameObjects.Image[] = [];
   wasThrusting = false;
+  ab!: Abilities;
+  lastAb = "";
   lastFuel = -2;
   lastCd = -1;
   hintCd = 0;
@@ -84,7 +88,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this, {
       lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
       nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
-      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false, lastFuel: -2, lastCd: -1, hintCd: 0,
+      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false, lastFuel: -2, lastCd: -1, hintCd: 0, lastAb: "",
     });
     this.gen++;
     if (!this.textures.exists("px")) buildTextures(this);
@@ -101,6 +105,7 @@ export class ArenaScene extends Phaser.Scene {
     this.goblin = new Goblin(this, 360, FLOOR_Y - 120, this.arena, this.fx, def);
     this.spider = new Spider(this, 1250, FLOOR_Y - 100, this.arena, this.fx, (l) => this.lasers.push(l), (x, y, p) => this.spiderSlam(x, y, p));
     this.blueprint = this.add.graphics().setDepth(50);
+    this.ab = new Abilities(this);
     if (this.cfg.mode === "arena") {
       const ch = challengeById(this.cfg.challenge);
       if (ch.playerHpMul) this.goblin.hp = this.goblin.maxHp = Math.round(this.goblin.maxHp * ch.playerHpMul);
@@ -111,7 +116,7 @@ export class ArenaScene extends Phaser.Scene {
 
     const kb = this.input.keyboard!;
     // enableCapture=false so typing in the DOM console still works.
-    this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,UP,LEFT,RIGHT,Q,R,E,F", false) as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,UP,LEFT,RIGHT,Q,R,E,F,ONE,TWO,THREE", false) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
       if (this.cinematic || this.over || this.cfg.mode === "menu") return;
@@ -120,6 +125,7 @@ export class ArenaScene extends Phaser.Scene {
         this.goblin.punch(p.worldX, p.worldY);
         const h = this.goblin.socketPos("right_hand");
         this.fx.burst(h.x, h.y, 6);
+        this.ab.onPunch(h.x, h.y);
       }
     });
 
@@ -140,7 +146,7 @@ export class ArenaScene extends Phaser.Scene {
     const onRestart = () => this.scene.restart({ ...this.cfg });
     const onStart = (cfg: RoundCfg) =>
       this.scene.restart({ ...cfg, ops: cfg.carry && cfg.char === this.cfg.char ? [...this.applied] : undefined });
-    const onSpecial = () => this.useSpecial();
+    const onSpecial = (slot?: number) => this.useSpecial(slot ?? 0);
     const onQuality = () => this.applyQuality();
     const onPersonality = () => (this.nextDirector = Math.min(this.nextDirector, 2.5));
     bus.on("submit-prompt", onSubmit);
@@ -159,6 +165,7 @@ export class ArenaScene extends Phaser.Scene {
       bus.off("quality", onQuality);
       bus.off("personality", onPersonality);
       this.lasers = [];
+      this.ab.reset();
     });
     if (this.cfg.mode === "menu") {
       for (const p of this.goblin.parts) p.setVisible(false);
@@ -231,7 +238,10 @@ export class ArenaScene extends Phaser.Scene {
     };
     if (this.cinematic || this.over) Object.assign(inp, { left: false, right: false, jump: false, thrust: false });
     if (Phaser.Input.Keyboard.JustDown(k.Q)) this.trySlam();
-    if (Phaser.Input.Keyboard.JustDown(k.F) || Phaser.Input.Keyboard.JustDown(k.E)) this.useSpecial();
+    if (Phaser.Input.Keyboard.JustDown(k.F) || Phaser.Input.Keyboard.JustDown(k.E) || Phaser.Input.Keyboard.JustDown(k.ONE)) this.useSpecial(0);
+    if (Phaser.Input.Keyboard.JustDown(k.TWO)) this.useSpecial(1);
+    if (Phaser.Input.Keyboard.JustDown(k.THREE)) this.useSpecial(2);
+    const abInp = { up: inp.jump || inp.thrust, aimX: inp.aimX, aimY: inp.aimY };
     if (Phaser.Input.Keyboard.JustDown(k.R) && this.over) bus.emit("restart");
 
     // Fixed 60 Hz simulation with catch-up: game speed stays correct at 30-45 fps on integrated GPUs.
@@ -244,6 +254,7 @@ export class ArenaScene extends Phaser.Scene {
       this.goblin.update(STEP, inp, time);
       this.spider.update(STEP * ts, time, this.goblin.x, this.goblin.y, this.cfg.mode === "lab");
       this.updateSpecials(STEP);
+      this.ab.step(STEP, abInp);
       this.updateLasers(ts);
       this.updateVent();
       if (!this.spider.dead && !this.cinematic) this.checkContactDamage();
@@ -253,12 +264,19 @@ export class ArenaScene extends Phaser.Scene {
     this.goblin.render(time);
     this.spider.render(time);
     this.renderDepth();
+    this.ab.render(time);
     if (this.goblin.thrusting && Math.random() < 0.02) this.log("player rocket-boosting");
 
     const fuel = this.goblin.comps.has("rocket_booster") ? Math.round(this.goblin.fuel * 100) / 100 : -1;
     if (fuel !== this.lastFuel) bus.emit(EV.FUEL, (this.lastFuel = fuel));
-    const cd = Math.ceil((this.goblin.specialCd / this.goblin.def.special.cooldown) * 50) / 50;
-    if (cd !== this.lastCd) bus.emit("special-cd", (this.lastCd = cd));
+    const abl = abilitiesOf(this.goblin.def);
+    const st = abl.map((a, i) => Math.ceil((this.goblin.cds[i] / a.cooldown) * 40) / 40);
+    const active = [this.ab.axe ? 1 : 0, this.ab.rageT > 0 ? 1 : 0, Math.ceil(this.ab.copterLeft * 40) / 40];
+    const key = st.join(",") + "|" + active.join(",");
+    if (key !== this.lastAb) {
+      this.lastAb = key;
+      bus.emit("ability-cd", { cds: st, axeOut: !!this.ab.axe, rage: this.ab.rageT > 0, copter: this.ab.copterLeft });
+    }
 
     // fell off-world safety
     if (this.goblin.y > H + 200) this.respawnGoblin();
@@ -308,18 +326,29 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------------
   // Character specials (F / E / HUD button)
   // ---------------------------------------------------------------------
-  useSpecial() {
+  useSpecial(slot = 0) {
     const g = this.goblin;
-    if (this.cfg.mode === "menu" || this.cinematic || this.over || g.hp <= 0) return;
-    if (g.specialCd > 0 || g.stun > 0) {
-      bus.emit("special-denied");
-      if (g.specialCd > 0) this.hint(`${g.def.special.name} RECHARGING`);
+    if (this.cfg.mode === "menu" || this.cinematic || this.over || g.hp <= 0 || this.ab.busy) return;
+    const sp = abilitiesOf(g.def)[slot];
+    if (!sp) return;
+    if (g.cds[slot] > 0 || g.stun > 0) {
+      bus.emit("special-denied", slot);
+      if (g.cds[slot] > 0) this.hint(`${sp.name} RECHARGING`);
       return;
     }
-    const sp = g.def.special;
-    g.specialCd = sp.cooldown;
-    this.log(`player used special ${sp.name}`);
     const aim = this.input.activePointer;
+    if (!["scrap_bomb", "sonic_wave", "dome", "ground_pound"].includes(sp.id)) {
+      // imported-character abilities: cooldown is only charged if the ability really started
+      const ok = this.ab.use(sp.id, { up: false, aimX: aim.worldX || this.spider.x, aimY: aim.worldY || this.spider.y });
+      if (!ok) {
+        bus.emit("special-denied", slot);
+        return;
+      }
+      g.cds[slot] = sp.cooldown;
+      return;
+    }
+    g.cds[slot] = sp.cooldown;
+    this.log(`player used special ${sp.name}`);
     switch (sp.id) {
       case "scrap_bomb": {
         const hand = g.socketPos("right_hand");
@@ -723,7 +752,7 @@ export class ArenaScene extends Phaser.Scene {
   // Combat
   // ---------------------------------------------------------------------
   /** short, throttled hint above the fighter when an input can't do anything yet */
-  private hint(text: string) {
+  hint(text: string) {
     if (this.time.now < this.hintCd) return;
     this.hintCd = this.time.now + 1500;
     this.fx.floatText(this.goblin.x, this.goblin.y - 100, text, "#9ffcff", 15);
@@ -749,6 +778,7 @@ export class ArenaScene extends Phaser.Scene {
     for (const pair of ev.pairs) {
       const a = pair.bodyA.parent ?? pair.bodyA,
         b = pair.bodyB.parent ?? pair.bodyB;
+      if (this.ab.onPair(a, b)) continue; // imported-character projectiles (axe, air cannon)
       // spring boxing glove
       if (glove && (a === glove || b === glove)) {
         const other = a === glove ? b : a;
@@ -956,7 +986,7 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
-  private emitHp() {
+  emitHp() {
     bus.emit(EV.HP, { player: this.goblin.hp / this.goblin.maxHp, enemy: this.spider.hp / this.spider.maxHp });
   }
 
