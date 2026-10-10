@@ -44,22 +44,14 @@ export function buildTextures(scene: Phaser.Scene) {
   tex(scene, "ring", 128, 128, (g) => {
     g.lineStyle(6, 0xffffff, 1).strokeCircle(64, 64, 58);
   });
-  tex(scene, "crack", 160, 40, (g) => {
-    g.lineStyle(3, 0x0a0a0c, 0.9);
-    const rays = [
-      [80, 4, 20, 10, 2, 22],
-      [80, 4, 140, 12, 158, 26],
-      [80, 4, 60, 26, 48, 38],
-      [80, 4, 104, 30, 118, 39],
-      [80, 4, 80, 20, 86, 36],
-    ];
-    for (const [a, b, c, d, e, f] of rays) {
-      g.beginPath().moveTo(a, b).lineTo(c, d).lineTo(e, f).strokePath();
+  tex(scene, "crack", 200, 36, (g) => {
+    // scorch mark
+    for (let r = 18; r > 0; r -= 3) g.fillStyle(0x050506, 0.12).fillEllipse(100, 10, r * 10, r * 1.4);
+    g.lineStyle(2, 0x050506, 0.9);
+    for (const [x2, y2] of [[30, 6], [170, 8], [60, 14], [140, 15], [100, 18], [15, 10], [185, 12]]) {
+      g.beginPath().moveTo(100, 4).lineTo((100 + x2) / 2 + (x2 % 7) - 3, 6 + (y2 % 5)).lineTo(x2, y2).strokePath();
     }
-    g.lineStyle(1, 0xff7a1a, 0.7);
-    for (const [a, b, c, d] of rays) g.beginPath().moveTo(a, b).lineTo(c, d).strokePath();
   });
-
   // ---- Goblin parts (vertical, "down" = +y) ----
   tex(scene, "g_torso", 40, 52, (g) => {
     g.fillStyle(METAL_DARK).fillRoundedRect(0, 0, 40, 52, 9);

@@ -357,8 +357,8 @@ export class ArenaScene extends Phaser.Scene {
           this.fx.floatText(contact.x, contact.y - 20, `-${Math.round(d)}`, "#ffc83d", 30);
           this.impact(contact.x, contact.y, Math.min(3, 0.6 + sp / 18), false);
           this.log(`hammer hit spider for ${Math.round(d)}`);
-        } else if (other.label === "platform" && sp > 13) {
-          this.impact(contact.x, contact.y, Math.min(3, (sp / 16) * Math.pow(chain!.params.mass, 0.3)), true);
+        } else if (other.label === "platform" && sp > (this.goblin.slamming ? 10 : 17)) {
+          this.impact(contact.x, contact.y, Math.min(3, (sp / 16) * Math.pow(chain!.params.mass, 0.3) * (this.goblin.slamming ? 1.4 : 1)), true);
         } else if (other.label === "crate" && sp > 8) {
           this.fx.burst(contact.x, contact.y, 20);
           this.matter.body.setVelocity(other, { x: head.velocity.x * 0.8, y: head.velocity.y * 0.8 - 5 });
@@ -385,7 +385,7 @@ export class ArenaScene extends Phaser.Scene {
   /** Signature moment #2: arena-shaking impact set piece. */
   impact(x: number, y: number, power: number, ground: boolean) {
     const now = this.time.now;
-    if (now - this.lastImpact < 120) return;
+    if (now - this.lastImpact < 300) return;
     this.lastImpact = now;
     this.fx.explosion(x, y, power);
     this.hitStop = 0.05 + 0.04 * power;
@@ -401,7 +401,7 @@ export class ArenaScene extends Phaser.Scene {
     ];
     this.arena.shove(x, y, 220 + 90 * power, 6 + 6 * power, loose);
     // shockwave damage to spider if close to ground slam
-    if (ground && !this.spider.dead) {
+    if (ground && !this.spider.dead && (this.goblin.slamming || power > 2.2)) {
       const d = Phaser.Math.Distance.Between(x, y, this.spider.x, this.spider.y + 80);
       if (d < 140 + 60 * power) {
         const dmg = this.spider.damage(6 * power, x, 10);
@@ -409,7 +409,15 @@ export class ArenaScene extends Phaser.Scene {
         this.log(`shockwave hit spider for ${Math.round(dmg)}`);
       }
     }
-    if (power > 1.8) this.arena.alarmPulse();
+    if (power > 1.8) {
+      this.arena.alarmPulse();
+      this.arena.ceilingRain(x, power);
+      const cam = this.cameras.main;
+      if (!this.cinematic) {
+        cam.setZoom(1.06);
+        this.tweens.add({ targets: cam, zoom: 1, duration: 380, ease: "Cubic.easeOut" });
+      }
+    }
     this.emitHp();
   }
 

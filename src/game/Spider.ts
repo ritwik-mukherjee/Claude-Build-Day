@@ -33,8 +33,9 @@ export class Spider {
   gfx: Phaser.GameObjects.Graphics;
   dome: Phaser.GameObjects.Image;
   legs: Leg[] = [];
-  hp = 100;
-  maxHp = 100;
+  hp = 160;
+  maxHp = 160;
+  private invuln = 0;
   facing = -1;
   state: State = "stalk";
   stateT = 0;
@@ -87,7 +88,8 @@ export class Spider {
   }
 
   damage(n: number, fromX: number, knock = 8): number {
-    if (this.dead) return 0;
+    if (this.dead || this.invuln > 0) return 0;
+    this.invuln = 0.2;
     const dmg = n * (this.shieldT > 0 ? 0.3 : 1);
     this.hp = Math.max(0, this.hp - dmg);
     this.flashT = 0.08;
@@ -127,6 +129,7 @@ export class Spider {
     this.shieldT = Math.max(0, this.shieldT - dt);
     this.enrageT = Math.max(0, this.enrageT - dt);
     this.flashT -= dt;
+    this.invuln -= dt;
     const rage = this.enrageT > 0 ? 1.6 : 1;
     this.facing = px < this.x ? -1 : 1;
     this.body.setFlipX(this.facing < 0);

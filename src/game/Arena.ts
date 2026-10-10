@@ -246,10 +246,30 @@ export class Arena {
   }
 
   crack(x: number, y: number, scale = 1) {
-    const c = this.scene.add.image(x, y + 6, "crack").setDepth(11).setScale(scale).setAlpha(0.9);
+    y = this.groundY(x, y - 40);
+    if (y > FLOOR_Y + 50) return;
+    const c = this.scene.add.image(x, y + 4, "crack").setDepth(11).setScale(scale).setAlpha(0.9);
     this.scene.tweens.add({ targets: c, alpha: 0, delay: 9000, duration: 2000, onComplete: () => c.destroy() });
-    const ember = this.scene.add.image(x, y + 4, "glow").setTint(0xff5a10).setScale(scale * 3, scale * 0.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(11);
+    const ember = this.scene.add.image(x, y + 2, "glow").setTint(0xff5a10).setScale(scale * 3, scale * 0.5).setBlendMode(Phaser.BlendModes.ADD).setDepth(11);
     this.scene.tweens.add({ targets: ember, alpha: 0, duration: 2500, onComplete: () => ember.destroy() });
+  }
+
+  /** Arena reaction to big hits: dust + debris rain from the ceiling, sparks off catwalk edges. */
+  ceilingRain(x: number, power: number) {
+    const s = this.scene;
+    for (let i = 0; i < 4 + power * 3; i++) {
+      s.time.delayedCall(i * 60, () => {
+        const dx = Phaser.Math.Clamp(x + Phaser.Math.Between(-320, 320), 40, W - 40);
+        this.fx.smokePuff(dx, 60, 1);
+        this.fx.spawnDebris(dx, 70, 1);
+      });
+    }
+    for (const p of this.plats.slice(1)) {
+      if (Math.abs(p.x + p.w / 2 - x) < 500) {
+        this.fx.burst(p.x + 4, p.y + 10, 10);
+        this.fx.burst(p.x + p.w - 4, p.y + 10, 10);
+      }
+    }
   }
 
   alarmPulse() {

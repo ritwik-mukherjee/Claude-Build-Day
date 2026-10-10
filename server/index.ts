@@ -63,7 +63,7 @@ async function callStructured(model: string, system: string, user: string, schem
   const msg = await client!.messages.create(
     {
       model,
-      max_tokens: 2000,
+      max_tokens: 4000,
       system,
       messages: [{ role: "user", content: user }],
       output_config: { effort: "low", format: { type: "json_schema", schema: schema as Record<string, unknown> } },

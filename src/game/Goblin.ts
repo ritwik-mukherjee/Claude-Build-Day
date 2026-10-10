@@ -194,7 +194,7 @@ export class Goblin {
         if (springs) this.fx.burst(this.x, gy, 12);
       }
       // ---- upright torso ----
-      this.drive(this.torso, 0, 0.35, 0.6);
+      this.drive(this.torso, 0, this.thrusting ? 0.5 : 0.35, this.thrusting ? 0.85 : 0.6);
       this.drive(this.head, 0, 0.3, 0.4);
       // ---- arms: right aims at pointer, left guards ----
       const aim = Math.atan2(inp.aimY - (this.y - 18), inp.aimX - this.x) - Math.PI / 2;
@@ -259,6 +259,10 @@ export class Goblin {
     }
 
     this.updateComponentVisuals(time);
+  }
+
+  get slamming() {
+    return this.slamT >= 0;
   }
 
   slam() {
