@@ -3,6 +3,7 @@
 // rendered in a 3/4 view at arena scale. Output: a 7x2 sprite sheet + per-frame foot rows.
 import * as THREE from "three";
 import { instantiate, loadEnvironment, aimBone } from "../../src/chamber/models";
+import { makeFists } from "./pose";
 
 type V3 = [number, number, number];
 // directions in model space: +z = forward, +y = up, +x = Hulk's left; s = side sign (left +1, right -1)
@@ -43,6 +44,7 @@ export async function bakeSmash(FW = 256, FH = 256, PX = 74, yaw = 0.95, SS = 2)
       aimBone(B(`${side}upleg`), B(`${side}leg`), v(p.thigh, s));
       aimBone(B(`${side}leg`), B(`${side}foot`), v(p.shin, s));
     }
+    makeFists(inst.bones, -1);
     return new Map([...rest.keys()].map((b) => [b, b.quaternion.clone()]));
   };
   const poses = Object.fromEntries(Object.entries(P).map(([k, p]) => [k, apply(p)]));

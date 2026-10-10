@@ -3,6 +3,7 @@
 // Run via scripts/bake/run.mjs against the dev server; output goes to public/assets/sprites/<id>/.
 import * as THREE from "three";
 import { instantiate, loadEnvironment, boneKey, type ModelId } from "../../src/chamber/models";
+import { armsDown, makeFists } from "./pose";
 
 type Part = "torso" | "head" | "uarmL" | "farmL" | "thighL" | "shinL" | "uarmR" | "farmR" | "thighR" | "shinR";
 interface Dims { torso: [number, number]; head: number; uarm: [number, number]; farm: [number, number]; thigh: [number, number]; shin: [number, number] }
@@ -16,10 +17,16 @@ const RIGS: Partial<Record<ModelId, RigSpec>> = {
   },
 };
 
-export async function bake(id: ModelId, D: Dims, SS = 4): Promise<Record<string, string>> {
+export async function bake(id: ModelId, D: Dims, SS = 4, fistFlip = 1): Promise<Record<string, string>> {
   const rig = RIGS[id]!;
   const inst = await instantiate(id);
   inst.root.updateMatrixWorld(true);
+  if (id === "hulk") {
+    // natural stance before segmenting: arms down (clean shoulder/elbow deformation) and fists
+    armsDown(inst.bones);
+    makeFists(inst.bones, fistFlip);
+    inst.root.updateMatrixWorld(true);
+  }
   const W = (k: string) => inst.bones.get(k)!.getWorldPosition(new THREE.Vector3());
   const J = (k: string) => W(rig.j[k]);
   const r = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
@@ -52,7 +59,9 @@ export async function bake(id: ModelId, D: Dims, SS = 4): Promise<Record<string,
     for (let v = 0; v < n; v++) for (let c = 0; c < 4; c++) if (bp[si.getComponent(v, c)] === part) wv[v] += sw.getComponent(v, c);
     const idx = g.index ? Array.from(g.index.array) : [...Array(n).keys()];
     const out: number[] = [];
-    for (let t = 0; t < idx.length; t += 3) if (wv[idx[t]] >= 0.3 || wv[idx[t + 1]] >= 0.3 || wv[idx[t + 2]] >= 0.3) out.push(idx[t], idx[t + 1], idx[t + 2]);
+    // limbs take a generous share of the joint skin (full deltoid / knee caps) so they overlap the torso
+    const th = part === "torso" || part === "head" ? 0.3 : 0.12;
+    for (let t = 0; t < idx.length; t += 3) if (wv[idx[t]] >= th || wv[idx[t + 1]] >= th || wv[idx[t + 2]] >= th) out.push(idx[t], idx[t + 1], idx[t + 2]);
     const ng = new THREE.BufferGeometry();
     for (const [k, a] of Object.entries(g.attributes)) ng.setAttribute(k, a);
     ng.setIndex(out);

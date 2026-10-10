@@ -153,8 +153,10 @@ export const IMPORTED: CharacterDef[] = [
     quote: "“Puny spider.”",
     tex: "xh",
     accent: "#5dbb3a",
-    dims: { torso: [52, 60], head: 20, headOffset: 0, uarm: [18, 34], farm: [19, 34], thigh: [20, 32], shin: [22, 36] },
-    density: 0.006,
+    // torso as wide as the model's shoulders so the arms pivot where the rendered deltoids are;
+    // density lowered to keep the torso mass the same as the original 52 px rig
+    dims: { torso: [64, 60], head: 20, headOffset: 0, uarm: [18, 34], farm: [19, 34], thigh: [20, 32], shin: [22, 36] },
+    density: 0.0049,
     hp: 180,
     armor: 0.8,
     speed: 6,

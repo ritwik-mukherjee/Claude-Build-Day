@@ -290,7 +290,8 @@ export class Goblin {
       this.drive(this.head, 0, 0.3, 0.4);
       // ---- arms: right aims at pointer, left guards ----
       const aim = Math.atan2(inp.aimY - (this.y - 18), inp.aimX - this.x) - Math.PI / 2;
-      this.drive(this.uarmR, aim, 0.35, 0.5);
+      // heavy model fighters keep the elbow bent (boxer guard) instead of a straight pointing arm
+      this.drive(this.uarmR, this.def.model ? aim * 0.6 : aim, 0.35, 0.5);
       this.drive(this.farmR, aim, 0.35, 0.5);
       const guard = this.comps.has("shield") ? -this.facing * 1.35 : this.facing * 0.4 + Math.sin(time * 0.004) * 0.15;
       this.drive(this.uarmL, this.comps.has("shield") ? -this.facing * 0.6 : guard, 0.3, 0.4);
