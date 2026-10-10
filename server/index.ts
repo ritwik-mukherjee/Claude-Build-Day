@@ -16,6 +16,8 @@ import {
   type ComponentType,
   type DirectorResponse,
   type LinkState,
+  type Personality,
+  PERSONALITIES,
   type MutateResponse,
 } from "../shared/mutations";
 import { fallbackCompile, fallbackDirect } from "../shared/fallback";
@@ -79,12 +81,18 @@ Map vague weapons (hammer, mace, wrecking ball, flail, sword) to chain_weapon. M
 If the request is impossible or off-topic, pick the closest fun component anyway. Max 3 operations.
 Summary: one punchy sentence describing the result, in-world.`;
 
-const DIRECTOR_SYSTEM = `You are the AI DIRECTOR of RAGDOLL.AI, an industrial gladiator arena where a mechanical goblin fights a mechanical spider.
+const VOICES: Record<Personality, string> = {
+  tactical: "a calm, clipped military TACTICAL ANALYST: precise numbers, threat assessments, no jokes",
+  inspector: "a dry, SARCASTIC ENGINEERING INSPECTOR: safety violations, permits, warranties, deadpan disdain",
+  chaos: "a completely UNHINGED CHAOS COMMENTATOR: ALL CAPS energy, exclamation marks, delighted by destruction (keep it PG)",
+};
+const DIRECTOR_SYSTEM = (p: Personality) => `You are the AI DIRECTOR of RAGDOLL.AI, an industrial gladiator arena where the player's mechanical fighter battles a mechanical spider (Arachnotron).
+Your voice: ${VOICES[p]}.
 You receive a combat summary. Choose ONE countermeasure or arena event that keeps the fight dramatic and fair:
 ${DIRECTOR_ACTIONS.join(", ")}.
 Counter the player's current build (e.g. lasers vs. airborne rocket users, enemy_shield_up vs. heavy flails, leap slam vs. shield turtling).
-If the player is losing badly, ease off (none or a mild arena event). intensity 1-3.
-commentary: a short sardonic arena-announcer line (< 100 chars) explaining the move.`;
+If the player is losing badly, ease off (none or a mild arena event). In "lab" mode only use arena_* actions or none. intensity 1-3.
+commentary: ONE line (< 110 chars) in your voice that references something that ACTUALLY happened in the events (a specific hit, mutation or special) and the move you chose.`;
 
 function textOf(msg: Anthropic.Message): string {
   return msg.content
@@ -158,6 +166,9 @@ app.post("/api/director", async (req, res) => {
     round: Number(s?.round) || 0,
     playerComponents: (Array.isArray(s?.playerComponents) ? s.playerComponents : []).map(String).slice(0, 8),
     events: (Array.isArray(s?.events) ? s.events : []).map((e) => String(e).slice(0, 80)).slice(-12),
+    personality: (PERSONALITIES as readonly string[]).includes(String(s?.personality)) ? (s.personality as Personality) : "inspector",
+    character: String(s?.character ?? "goblin").slice(0, 20),
+    mode: s?.mode === "lab" ? "lab" : "arena",
   };
   let out: DirectorResponse;
   if (!client || directorBusy) {
@@ -165,7 +176,7 @@ app.post("/api/director", async (req, res) => {
   } else {
     directorBusy = true;
     try {
-      const raw = await callStructured(DIRECTOR_MODEL, DIRECTOR_SYSTEM, JSON.stringify(summary), DIRECTOR_JSON_SCHEMA, 25_000);
+      const raw = await callStructured(DIRECTOR_MODEL, DIRECTOR_SYSTEM(summary.personality!), JSON.stringify(summary), DIRECTOR_JSON_SCHEMA, 25_000);
       out = { decision: DirectorDecisionSchema.parse(raw), source: "opus" };
       link = { state: "live" };
     } catch (err) {

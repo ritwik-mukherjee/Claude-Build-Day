@@ -143,6 +143,14 @@ export const DIRECTOR_JSON_SCHEMA = {
   },
 } as const;
 
+export const PERSONALITIES = ["tactical", "inspector", "chaos"] as const;
+export type Personality = (typeof PERSONALITIES)[number];
+export const PERSONALITY_LABEL: Record<Personality, string> = {
+  tactical: "TACTICAL ANALYST",
+  inspector: "ENGINEERING INSPECTOR",
+  chaos: "CHAOS COMMENTATOR",
+};
+
 export interface CombatSummary {
   elapsed: number;
   playerHp: number;
@@ -150,6 +158,9 @@ export interface CombatSummary {
   playerComponents: string[];
   events: string[];
   round: number;
+  personality?: Personality;
+  character?: string;
+  mode?: "arena" | "lab";
 }
 
 export type LinkState = "no_key" | "checking" | "live" | "auth_failed" | "degraded" | "offline";

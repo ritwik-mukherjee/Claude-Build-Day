@@ -8,6 +8,7 @@ import {
   type ComponentType,
   type DirectorDecision,
   type MutationPlan,
+  type Personality,
 } from "./mutations";
 
 const has = (t: string, ...words: string[]) => words.some((w) => t.includes(w));
@@ -159,21 +160,81 @@ export const ROULETTE: string[] = [
   "Three cyan rocket boosters and a long boxing glove",
 ];
 
-const LINES: Record<string, string[]> = {
-  rocket_booster: ["Goblin airborne. Spider recalibrating anti-air optics.", "Boosters detected. Lasers now tracking the sky."],
-  chain_weapon: ["Heavy iron swinging. Spider hardening its carapace.", "That flail has opinions. Countermeasures deployed."],
-  shield: ["Shield up? Cute. The spider will simply fall on you.", "Defensive posture logged. Initiating leap protocol."],
-  generic: ["The crowd demands pain. Dropping hardware.", "Arena maintenance: optional. Crates: mandatory.", "Steam pressure rising. Mind the vents."],
+const ACTION_NAME: Record<DirectorDecision["action"], string> = {
+  none: "a dramatic pause",
+  enemy_laser_barrage: "laser barrage",
+  enemy_leap_slam: "leap slam",
+  enemy_shield_up: "carapace shield",
+  enemy_enrage: "full enrage",
+  arena_crane_drop: "crane drop",
+  arena_steam_vent: "steam vents",
+  arena_crate_rain: "crate rain",
 };
 
-export function fallbackDirect(s: CombatSummary): DirectorDecision {
+/** Pick a countermeasure from the actual build/state (deterministic). */
+function chooseAction(s: CombatSummary): { action: DirectorDecision["action"]; intensity: number } {
   const comps = s.playerComponents;
   const roll = (s.round * 7 + Math.floor(s.elapsed)) % 4;
   const intensity = s.enemyHp < 40 ? 3 : s.enemyHp < 70 ? 2 : 1;
-  if (s.enemyHp < 25) return { commentary: "Spider critical. Overclocking all servos.", action: "enemy_enrage", intensity: 3 };
-  if (comps.includes("rocket_booster") && roll < 2) return { commentary: LINES.rocket_booster[roll % 2], action: "enemy_laser_barrage", intensity };
-  if (comps.includes("chain_weapon") && roll === 2) return { commentary: LINES.chain_weapon[s.round % 2], action: "enemy_shield_up", intensity };
-  if (comps.includes("shield") && roll === 3) return { commentary: LINES.shield[s.round % 2], action: "enemy_leap_slam", intensity };
+  const arenaOnly: DirectorDecision["action"][] = ["arena_crate_rain", "arena_crane_drop", "arena_steam_vent"];
+  if (s.mode === "lab") return { action: arenaOnly[s.round % 3], intensity: 1 };
+  if (s.playerHp < 25) return { action: "none", intensity: 1 }; // ease off a losing player
+  if (s.enemyHp < 25) return { action: "enemy_enrage", intensity: 3 };
+  if (comps.includes("rocket_booster") && roll < 2) return { action: "enemy_laser_barrage", intensity };
+  if ((comps.includes("chain_weapon") || comps.includes("boxing_glove")) && roll === 2) return { action: "enemy_shield_up", intensity };
+  if (comps.includes("shield") && roll === 3) return { action: "enemy_leap_slam", intensity };
   const generic: DirectorDecision["action"][] = ["arena_crate_rain", "arena_crane_drop", "arena_steam_vent", "enemy_laser_barrage"];
-  return { commentary: LINES.generic[s.round % 3], action: generic[s.round % generic.length], intensity };
+  return { action: generic[s.round % generic.length], intensity };
+}
+
+/** Parse the most recent notable event into a short phrase, e.g. "hammer hit spider for 35". */
+function lastEvent(events: string[]): { kind: "mutation" | "hit" | "hurt" | "special" | "none"; text: string } {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i].replace(/^\[t=\d+\]\s*/, "");
+    if (e.startsWith("player mutated:")) return { kind: "mutation", text: e.replace("player mutated:", "").replace("Workshop override:", "").trim().replace(/\.$/, "") };
+    if (/hit spider for|crushed spider/.test(e)) return { kind: "hit", text: e };
+    if (/hit player for|crushed player/.test(e)) return { kind: "hurt", text: e };
+    if (e.startsWith("player used special")) return { kind: "special", text: e.replace("player used special ", "") };
+  }
+  return { kind: "none", text: "" };
+}
+
+const pick = <T,>(arr: T[], n: number) => arr[Math.abs(n) % arr.length];
+
+/** Contextual local commentary in each director personality's voice. */
+export function voiceLine(p: Personality, s: CombatSummary, action: DirectorDecision["action"]): string {
+  const ev = lastEvent(s.events);
+  const act = ACTION_NAME[action];
+  const who = (s.character ?? "goblin").toUpperCase();
+  const comp = (s.playerComponents[s.playerComponents.length - 1] ?? "bare chassis").replace(/_/g, " ");
+  const n = s.round;
+  const lines: Record<Personality, Record<string, string[]>> = {
+    tactical: {
+      mutation: [`New hardware logged: ${ev.text}. Threat revised. Countering with ${act}.`, `Loadout change confirmed (${comp}). Adjusting doctrine: ${act}.`],
+      hit: [`Confirmed: ${ev.text}. Enemy integrity ${s.enemyHp}%. Response: ${act}.`, `Effective strike. Arachnotron at ${s.enemyHp}%. Deploying ${act}.`],
+      hurt: [`${who} hull at ${s.playerHp}%. Recommend evasive movement. Next: ${act}.`],
+      special: [`${ev.text} observed. Adapting. Executing ${act}.`],
+      none: [`T+${s.elapsed}s. Player ${s.playerHp}% vs enemy ${s.enemyHp}%. Executing ${act}.`],
+    },
+    inspector: {
+      mutation: [`Inspection note: ${ev.text}. Zero permits filed. Approving ${act}.`, `${comp} bolted on with duct tape and optimism. Citation: ${act}.`],
+      hit: [`${ev.text}. Structurally questionable, legally hilarious. Fine: ${act}.`, `That impact voided three warranties. Spider at ${s.enemyHp}%. Issuing ${act}.`],
+      hurt: [`Hull at ${s.playerHp}%, warranty at 0%. Scheduling ${act}.`],
+      special: [`${ev.text}? Not in the safety manual. Retaliatory ${act} approved.`],
+      none: [`Code violation #${n * 7 + 13}: insufficient guard rails. Approving ${act}.`, `Routine inspection of ${who}: everything is on fire. Adding ${act}.`],
+    },
+    chaos: {
+      mutation: [`${ev.text.toUpperCase()}!!! WHO APPROVED THIS?! ME!!! ${act.toUpperCase()}!!!`, `${comp.toUpperCase()}?!?! INCREDIBLE. TERRIBLE. ${act.toUpperCase()} TIME!!!`],
+      hit: [`${ev.text.toUpperCase()}!!! THE FLOOR IS SCREAMING!!! ${act.toUpperCase()}!!!`, `SPIDER AT ${s.enemyHp}% AND I AM AT 1000%!!! ${act.toUpperCase()}!!!`],
+      hurt: [`${who} AT ${s.playerHp}% AND I'VE NEVER BEEN HAPPIER!!! ${act.toUpperCase()}!!!`],
+      special: [`${ev.text.toUpperCase()}!!! DO IT AGAIN!!! ${act.toUpperCase()} FOR EVERYONE!!!`],
+      none: [`ROUND ${n}!!! THE CRATES ARE HUNGRY!!! ${act.toUpperCase()}!!!`, `NOBODY WARNED ${who} ABOUT THE ${act.toUpperCase()}!!! HERE IT COMES!!!`],
+    },
+  };
+  return pick(lines[p][ev.kind], n).slice(0, 140);
+}
+
+export function fallbackDirect(s: CombatSummary): DirectorDecision {
+  const { action, intensity } = chooseAction(s);
+  return { commentary: voiceLine(s.personality ?? "inspector", s, action), action, intensity };
 }

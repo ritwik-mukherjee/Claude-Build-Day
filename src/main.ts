@@ -99,7 +99,7 @@ bus.on(EV.LOADOUT, (list: string[]) => {
 let typeTimer = 0;
 bus.on(EV.DIRECTOR, ({ text, source, action }: { text: string; source: string; action?: string }) => {
   const el = $("#dir-text");
-  $("#dir-src").textContent = source === "opus" ? "OPUS · LIVE" : source === "system" ? "SYSTEM" : "LOCAL FALLBACK";
+  $("#dir-src").textContent = source === "opus" ? "OPUS · LIVE" : source === "system" ? "SYSTEM" : "LOCAL";
   $("#dir-action").textContent = action && action !== "none" ? `▶ ${action.replace(/_/g, " ").toUpperCase()}` : "";
   window.clearInterval(typeTimer);
   el.textContent = "";

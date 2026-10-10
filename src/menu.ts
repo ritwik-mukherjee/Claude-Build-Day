@@ -4,6 +4,7 @@ import { bus } from "./game/bus";
 import { CHARACTERS, charById, paintPortrait, type CharacterDef, type CharacterId } from "./game/characters";
 import { Q } from "./game/quality";
 import { ROULETTE } from "../shared/fallback";
+import { PERSONALITIES, type Personality } from "../shared/mutations";
 import type { Mode } from "./game/ArenaScene";
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector(s) as T;
@@ -23,7 +24,20 @@ export const LAB_PROMPTS: [string, string][] = [
   ["🎁 surprise me", "Surprise me"],
 ];
 
+let storedPers: string | null = null;
+try {
+  storedPers = localStorage.getItem("ragdoll.personality");
+} catch {
+  /* ignore */
+}
+const INTRO: Record<Personality, string> = {
+  tactical: "Tactical analyst online. Monitoring the engagement.",
+  inspector: "Inspector on site. Clipboard ready. Everything here is a violation.",
+  chaos: "OH IT'S MY TURN?!?! SOMEBODY HAND ME THE BIG RED BUTTON!!!",
+};
+
 export const state = {
+  personality: ((PERSONALITIES as readonly string[]).includes(storedPers ?? "") ? storedPers : "inspector") as Personality,
   mode: "menu" as Mode,
   char: "goblin" as CharacterId,
   challenge: "standard",
@@ -143,6 +157,22 @@ export function initMenu(game: Phaser.Game) {
       : "<i>nothing bolted on yet — try a prompt or the roulette</i>";
   });
   $("#special").addEventListener("click", () => bus.emit("special"));
+  const renderPers = () => document.querySelectorAll<HTMLButtonElement>("#dir-pers button").forEach((b) => b.classList.toggle("on", b.dataset.p === state.personality));
+  document.querySelectorAll<HTMLButtonElement>("#dir-pers button").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.personality = b.dataset.p as Personality;
+      try {
+        localStorage.setItem("ragdoll.personality", state.personality);
+      } catch {
+        /* ignore */
+      }
+      renderPers();
+      b.blur();
+      bus.emit("director", { text: INTRO[state.personality], source: "system" });
+      bus.emit("personality", state.personality);
+    }),
+  );
+  renderPers();
   const fxBtn = $("#btn-fx");
   const renderFx = () => (fxBtn.textContent = Q.low ? "FX: LOW" : "FX: HIGH");
   fxBtn.addEventListener("click", () => {

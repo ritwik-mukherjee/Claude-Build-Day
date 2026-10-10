@@ -11,6 +11,7 @@ import { buildTextures } from "./textures";
 import { buildCharacterTextures, charById, type CharacterId } from "./characters";
 import { Q } from "./quality";
 import { MB } from "./util";
+import { state as menuState } from "../menu";
 
 export type Mode = "menu" | "arena" | "lab";
 export interface RoundCfg {
@@ -118,12 +119,14 @@ export class ArenaScene extends Phaser.Scene {
       this.scene.restart({ ...cfg, ops: cfg.carry && cfg.char === this.cfg.char ? [...this.applied] : undefined });
     const onSpecial = () => this.useSpecial();
     const onQuality = () => this.applyQuality();
+    const onPersonality = () => (this.nextDirector = Math.min(this.nextDirector, 2.5));
     bus.on("submit-prompt", onSubmit);
     bus.on("console-focus", onFocus);
     bus.on("restart", onRestart);
     bus.on("start", onStart);
     bus.on("special", onSpecial);
     bus.on("quality", onQuality);
+    bus.on("personality", onPersonality);
     this.events.once("shutdown", () => {
       bus.off("submit-prompt", onSubmit);
       bus.off("console-focus", onFocus);
@@ -131,6 +134,7 @@ export class ArenaScene extends Phaser.Scene {
       bus.off("start", onStart);
       bus.off("special", onSpecial);
       bus.off("quality", onQuality);
+      bus.off("personality", onPersonality);
       this.lasers = [];
     });
     if (this.cfg.mode === "menu") {
@@ -920,6 +924,9 @@ export class ArenaScene extends Phaser.Scene {
       round: this.round,
       playerComponents: [...this.goblin.comps.keys()],
       events: this.events_.slice(-12),
+      personality: menuState.personality,
+      character: this.goblin.def.name,
+      mode: this.cfg.mode === "lab" ? ("lab" as const) : ("arena" as const),
     };
     const gen = this.gen;
     const res = await requestDirector(summary);

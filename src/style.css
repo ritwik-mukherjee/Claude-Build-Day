@@ -254,3 +254,9 @@ body.mode-lab #labpanel { display: block; }
 .ch-summary.bad { color: var(--red); text-shadow: 0 0 18px rgba(255,51,68,0.6); }
 .ch-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 3; }
 .ch-skip { position: absolute; left: 28px; bottom: 18px; font-size: 11px; letter-spacing: 0.15em; color: rgba(220,240,255,0.35); z-index: 2; }
+
+/* ---------- director personalities ---------- */
+.dir-pers { display: inline-flex; gap: 4px; margin-left: 10px; }
+.dir-pers button { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; color: rgba(255,200,160,0.55); background: transparent; border: 1px solid rgba(255,122,26,0.3); padding: 1px 6px; cursor: pointer; }
+.dir-pers button:hover { color: #fff; border-color: var(--orange); }
+.dir-pers button.on { color: #1a0800; background: var(--orange); border-color: var(--orange); }
