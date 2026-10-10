@@ -103,3 +103,23 @@ export default {
   events,
   music: { bpm: 128, start: 2.5, end: 17.65, bass: [41.2, 41.2, 49.0, 36.7], mute: [[5.9, 8.0]] },
 };
+
+// ---- v2 cut: remap the original cues through the retimed windows + hits on every key-art cut
+const WIN = [[0, 1.35, 0, 1.35], [1.35, 2.3, 1.35, 2.5], [2.3, 3.6, 2.5, 6.0], [3.6, 4.9, 6.0, 9.6], [13.2, 14.6, 14.6, 16.0], [14.6, 15.4, 16.0, 17.7], [15.4, 16.6, 17.7, 18.3], [16.6, 20.0, 18.3, 20.0]];
+const v2 = [];
+for (const e of events) {
+  const w = WIN.find(([, , a, b]) => e.t >= a && e.t < b);
+  if (!w) continue;
+  const [na, nb, a, b] = w;
+  const t = na + ((e.t - a) / (b - a)) * (nb - na);
+  v2.push({ ...e, t: +t.toFixed(3), ...(e.dur ? { dur: Math.min(e.dur, e.type === "roar" ? 1.0 : e.dur) } : {}) });
+}
+for (const t of [4.9, 5.7, 6.4, 7.6, 8.9, 10.0, 10.9, 12.1, 13.2]) {
+  v2.push({ type: "whoosh", t, dur: 0.3, rising: true, gain: 0.6 });
+  v2.push({ type: "hit", t, power: 0.7, gain: 0.85 });
+  v2.push({ type: "metal", t, f: 150 + (t * 37) % 120, gain: 0.45 });
+}
+v2.push({ type: "impact", t: 7.2, power: 1.0 }); // Hulk lands (gamma drop)
+v2.push({ type: "impact", t: 10.0, power: 0.9 });
+v2.push({ type: "drone", t: 4.9, dur: 8.3, f: 49, fade_in: 0.3, fade_out: 0.5, gain: 0.8 });
+export const V2 = { events: v2.sort((x, y) => x.t - y.t), music: { bpm: 128, start: 2.3, end: 16.5, bass: [41.2, 41.2, 49.0, 36.7], mute: [] } };

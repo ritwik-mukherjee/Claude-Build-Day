@@ -2,7 +2,7 @@
 // renderFrame(t) draws one 1920×1080 frame as a pure function of time. All gameplay pixels come
 // from real in-engine captures (.work/frames/*); key art plates are the user-supplied images.
 import { G, setManifest } from "./lib.js";
-import { EDIT } from "./edit.js";
+import { EDIT2 as EDIT } from "./edit.js";
 const { ctx, W, H } = G;
 
 window.ready = (async () => {

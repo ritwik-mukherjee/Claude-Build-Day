@@ -8,7 +8,7 @@ K = Path(__file__).resolve().parent / ".work" / "keyart"
 sb = Image.open(K / "5.webp").convert("RGB")
 xs = [(0, 556), (561, 1110), (1116, 1672)]
 ys = [(0, 312), (318, 625), (631, 941)]
-panels = {"sb-hulk": (1, 0), "sb-doraemon": (1, 1), "sb-kratos": (1, 2), "sb-spider": (2, 0), "sb-title": (0, 0)}
+panels = {"sb-hulk": (1, 0), "sb-doraemon": (1, 1), "sb-kratos": (1, 2), "sb-spider": (2, 0), "sb-title": (0, 0), "sb-chamber": (0, 2)}
 for name, (r, c) in panels.items():
     (x0, x1), (y0, y1) = xs[c], ys[r]
     p = sb.crop((x0 + 2, y0 + 2, x1 - 2, y1 - 2))

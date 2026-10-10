@@ -187,3 +187,75 @@ function measureT(s, size) {
 
 import { prompt, transform, payoff, intel } from "./gameplay.js";
 export const EDIT = [hookA, hookB, ...prompt, ...transform, ...payoff, ...intel, roster, brand];
+
+// ===================================================================== v2 cut: more key art, less gameplay
+/** play an existing beat over a new time window (linear retime) */
+function retime(beat, a, b, srcA = beat.a, srcB = beat.b) {
+  return { a, b, draw: (t) => { const st = srcA + ((t - a) / (b - a)) * (srcB - srcA); return beat.draw(st, st - beat.a); } };
+}
+/** cinematic key-art plate: slow push, grade, flash-in, big title */
+function art2(name, a, b, o = {}) {
+  return {
+    a, b,
+    async draw(t, lt) {
+      const d = b - a, k = lt / d;
+      const img = await art(name);
+      const sh = shake(t, 8 * Math.exp(-lt / 0.12));
+      plate(img, { cx: lerp(o.cx0 ?? 0.5, o.cx1 ?? 0.5, ease.io3(k)), cy: lerp(o.cy0 ?? 0.5, o.cy1 ?? 0.5, ease.io3(k)), z: lerp(o.z0 ?? 1.04, o.z1 ?? 1.16, ease.out3(k)), ...sh }, { filter: o.filter ?? "contrast(1.15) saturate(1.1)" });
+      if (o.title) {
+        const g = G.ctx.createLinearGradient(0, H * 0.6, 0, H);
+        g.addColorStop(0, "rgba(0,0,0,0)");
+        g.addColorStop(1, "rgba(0,0,0,0.75)");
+        G.ctx.fillStyle = g;
+        G.ctx.fillRect(0, H * 0.6, W, H * 0.4);
+        const kt = inv(0.08, 0.3, lt);
+        text(o.title, 120, H - 170, { size: 96, align: "left", track: 8, color: "#fff", alpha: ease.out3(kt), scale: lerp(1.2, 1, ease.outExpo(kt)), glow: 26, glowColor: o.glow ?? "rgba(255,120,30,0.8)" });
+        if (o.sub) text(o.sub, 126, H - 92, { size: 30, weight: 700, align: "left", track: 10, color: o.subColor ?? ORANGE, alpha: ease.out3(inv(0.25, 0.45, lt)), glow: 16, glowColor: "rgba(255,120,30,0.7)" });
+      }
+      fill("#ffffff", (o.flash ?? 0.5) * Math.exp(-lt / 0.05), "lighter");
+      chroma(9 * Math.exp(-lt / 0.07));
+      finish(t, { bloomK: 0.35, vig: 0.6, grainK: 0.06, punch: false });
+    },
+  };
+}
+/** real gamma-drop entrance (Hulk in the arena) */
+const gamma = {
+  a: 6.4, b: 7.6,
+  async draw(t, lt) {
+    const f = pw(lt, [[0, 18], [0.55, 100], [0.8, 118], [1.2, 132]]);
+    const img = await frame("hulk-enter", f);
+    const sh = shake(t, 16 * Math.exp(-Math.max(0, lt - 0.8) / 0.15) * (lt > 0.8 ? 1 : 0));
+    plate(img, { cx: 0.3, cy: 0.62, z: lerp(1.7, 2.1, lt / 1.2), ...sh }, { filter: "contrast(1.15) saturate(1.2)" });
+    fill("#d8ffd0", 0.5 * Math.exp(-Math.max(0, lt - 0.8) / 0.06) * (lt > 0.8 ? 1 : 0), "lighter");
+    fill("#ffffff", 0.4 * Math.exp(-lt / 0.05), "lighter");
+    finish(t, { bloomK: 0.45, vig: 0.55, punch: false });
+  },
+};
+import { prompt as P2, transform as T2, payoff as PO2, intel as I2 } from "./gameplay.js";
+const brand2 = retime(brand, 16.6, 20.01, 18.3, 20.01);
+const brandBg = {
+  a: 16.6, b: 20.01,
+  async draw(t, lt) {
+    await brand2.draw(t);
+    const img = await art("kratos-3");
+    plate(img, { cx: 0.5, cy: 0.45, z: lerp(1.1, 1.2, lt / 3.4) }, { alpha: 0.22 * inv(0.1, 0.6, lt) * (1 - inv(3.0, 3.35, lt)), comp: "screen", filter: "blur(5px) brightness(0.7) saturate(0.6)" });
+  },
+};
+export const EDIT2 = [
+  hookA,
+  retime(hookB, 1.35, 2.3, 1.35, 2.5),
+  retime(P2[0], 2.3, 3.6, 2.5, 6.0),
+  retime(T2[0], 3.6, 4.9, 6.0, 9.6),
+  art2("sb-chamber", 4.9, 5.7, { title: "PROMPT → INVENTION", sub: "SIX BOOSTERS. ONE GOBLIN.", glow: "rgba(38,240,255,0.8)", z0: 1.15, z1: 1.3, cy0: 0.55, cy1: 0.45 }),
+  art2("sb-hulk", 5.7, 6.4, { title: "HULK SMASH", sub: "GAMMA-POWERED WRECKER", subColor: "#7dff5a", z0: 1.05, z1: 1.2, cx0: 0.45, cx1: 0.55 }),
+  gamma,
+  art2("kratos-4", 7.6, 8.9, { title: "KRATOS", sub: "LEVIATHAN AXE · SPARTAN RAGE", z0: 1.05, z1: 1.18, cx0: 0.62, cx1: 0.7, cy0: 0.55, cy1: 0.45 }),
+  art2("sb-kratos", 8.9, 10.0, { z0: 1.2, z1: 1.05, cx0: 0.6, cx1: 0.55 }),
+  art2("kratos-3", 10.0, 10.9, { z0: 1.25, z1: 1.1, cy0: 0.4, cy1: 0.45, filter: "contrast(1.25) saturate(0.95) brightness(0.95)" }),
+  art2("sb-doraemon", 10.9, 12.1, { title: "DORAEMON", sub: "AIR CANNON · ANYWHERE DOOR", subColor: "#4fc3ff", glow: "rgba(38,180,255,0.8)", z0: 1.05, z1: 1.2 }),
+  art2("sb-spider", 12.1, 13.2, { title: "THE ARACHNOTRON", sub: "IT ADAPTS TO EVERY BUILD", subColor: "#ff4455", glow: "rgba(255,50,60,0.8)", z0: 1.2, z1: 1.05 }),
+  retime(PO2[PO2.length - 1], 13.2, 14.6, 14.6, 16.0),
+  retime(I2[0], 14.6, 15.4, 16.0, 17.7),
+  retime(roster, 15.4, 16.6, 17.7, 18.3),
+  brandBg,
+];

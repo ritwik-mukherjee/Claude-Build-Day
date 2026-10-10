@@ -20,7 +20,7 @@ if [[ "$STEP" == all || "$STEP" == render ]]; then
   ./render-all.sh
 fi
 if [[ "$STEP" == all || "$STEP" == audio ]]; then
-  node -e 'import("./compose/cues.js").then(m => process.stdout.write(JSON.stringify(m.default)))' > .work/cues.json
+  node -e 'import("./compose/cues.js").then(m => process.stdout.write(JSON.stringify(m.V2)))' > .work/cues.json
   python3 audio/sfx.py
 fi
 if [[ "$STEP" == all || "$STEP" == encode ]]; then
