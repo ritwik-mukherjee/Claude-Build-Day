@@ -142,14 +142,18 @@ export interface CombatSummary {
   round: number;
 }
 
+export type LinkState = "no_key" | "checking" | "live" | "auth_failed" | "degraded" | "offline";
+
 export interface MutateResponse {
   plan: MutationPlan;
   source: "sonnet" | "fallback";
   note?: string;
+  link?: LinkState;
 }
 
 export interface DirectorResponse {
   decision: DirectorDecision;
   source: "opus" | "fallback";
   note?: string;
+  link?: LinkState;
 }

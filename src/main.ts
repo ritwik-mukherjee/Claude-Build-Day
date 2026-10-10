@@ -121,7 +121,7 @@ bus.on(EV.MUTATION_START, ({ prompt }: { prompt: string }) => {
   pendingCard.innerHTML = `<div class="t"><span>${fmtT()}</span><span class="badge console">COMPILING</span></div><div class="p"></div>`;
   (pendingCard.querySelector(".p") as HTMLElement).textContent = `“${prompt}”`;
   tl.prepend(pendingCard);
-  while (tl.children.length > 6) tl.lastElementChild?.remove();
+  while (tl.children.length > 4) tl.lastElementChild?.remove();
 });
 bus.on(EV.MUTATION_PLAN, ({ plan, source, note }: { plan: MutationPlan; source: string; note?: string }) => {
   $("#compile").classList.remove("on");
@@ -185,21 +185,51 @@ bus.on(EV.IMPACT, () => {
   void hud.offsetWidth;
   hud.classList.add("impact");
 });
-bus.on(EV.GAME_OVER, ({ winner }: { winner: string }) => {
-  $("#gameover").classList.add("on");
+bus.on(EV.GAME_OVER, ({ winner, time, mutations, hp }: { winner: string; time: number; mutations: number; hp: number }) => {
+  const go = $("#gameover");
+  go.classList.add("on");
+  go.classList.toggle("lose", winner !== "player");
   ($("#gameover .go-title") as HTMLElement).textContent = winner === "player" ? "VICTORY" : "SCRAPPED";
+  const t = `${String(Math.floor(time / 60)).padStart(2, "0")}:${String(Math.floor(time % 60)).padStart(2, "0")}`;
+  ($("#gameover .go-sub") as HTMLElement).textContent =
+    winner === "player"
+      ? `ARACHNOTRON DECOMMISSIONED · ${t} · ${mutations} MUTATION${mutations === 1 ? "" : "S"} · ${Math.round(hp)}% HULL`
+      : `GOBLIN REDUCED TO SCRAP · ${t} · ${mutations} MUTATION${mutations === 1 ? "" : "S"}`;
 });
 bus.on("restart", () => {
   $("#gameover").classList.remove("on");
+  $("#blueprint").classList.remove("on");
+  $("#compile").classList.remove("on");
+  hud.classList.remove("cine");
+  submitBtn.disabled = false;
+  pendingCard = null;
+  status.classList.remove("err");
+  status.textContent = statusDefault;
   tl.innerHTML = "";
   startT = performance.now();
 });
 
-getStatus().then((s) => {
+// Link status: only "LIVE" after the server has a real authenticated API response.
+let models = "";
+function renderLink(state: string, detail?: string) {
   const el = $("#link");
-  if (!s) el.textContent = "LINK: OFFLINE · LOCAL COMPILER";
-  else if (s.live) {
-    el.textContent = `LINK: LIVE · ${s.mutationModel} / ${s.directorModel}`;
-    el.classList.add("live");
-  } else el.textContent = "LINK: NO API KEY · DETERMINISTIC FALLBACK";
-});
+  const text: Record<string, string> = {
+    live: `LINK: LIVE AI · ${models}`,
+    checking: "LINK: VERIFYING API KEY…",
+    no_key: "LINK: NO API KEY · LOCAL FALLBACK",
+    auth_failed: `LINK: AUTH FAILED${detail ? ` (${detail})` : ""} · LOCAL FALLBACK`,
+    degraded: "LINK: AI ERROR · LOCAL FALLBACK",
+    offline: "LINK: SERVER OFFLINE · IN-BROWSER FALLBACK",
+  };
+  el.textContent = text[state] ?? `LINK: ${state}`;
+  el.className = `link ${state}`;
+}
+bus.on("link", ({ state }: { state: string }) => renderLink(state));
+async function pollStatus(tries = 8) {
+  const s = await getStatus();
+  if (!s) return renderLink("offline");
+  models = `${s.mutationModel} / ${s.directorModel}`;
+  renderLink(s.state, s.detail);
+  if (s.state === "checking" && tries > 0) setTimeout(() => pollStatus(tries - 1), 1500);
+}
+pollStatus();

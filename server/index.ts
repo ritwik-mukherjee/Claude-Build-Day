@@ -15,6 +15,7 @@ import {
   type CombatSummary,
   type ComponentType,
   type DirectorResponse,
+  type LinkState,
   type MutateResponse,
 } from "../shared/mutations";
 import { fallbackCompile, fallbackDirect } from "../shared/fallback";
@@ -24,6 +25,36 @@ const MUTATION_MODEL = process.env.MUTATION_MODEL ?? "claude-sonnet-5-5";
 const DIRECTOR_MODEL = process.env.DIRECTOR_MODEL ?? "claude-opus-5-5";
 const HAS_KEY = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 const client = HAS_KEY ? new Anthropic({ maxRetries: 1 }) : null;
+
+// Honest link status for the HUD. "live" only after a real authenticated API response.
+let link: { state: LinkState; detail?: string } = { state: HAS_KEY ? "checking" : "no_key" };
+
+function friendly(err: unknown): string {
+  if (err instanceof Anthropic.AuthenticationError) return "API auth failed (401)";
+  if (err instanceof Anthropic.PermissionDeniedError) return "API permission denied (403)";
+  if (err instanceof Anthropic.APIError) return `API error ${err.status ?? ""}`.trim();
+  return (err as Error).message.slice(0, 80);
+}
+
+function noteFailure(err: unknown) {
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    link = { state: "auth_failed", detail: `HTTP ${err.status}` };
+  } else if (link.state !== "auth_failed") {
+    link = { state: "degraded", detail: (err as Error).message.slice(0, 80) };
+  }
+}
+
+async function probeLink() {
+  if (!client) return;
+  try {
+    // Cheap authenticated call (no tokens spent) that also confirms the model id exists.
+    await client.models.retrieve(MUTATION_MODEL, {}, { timeout: 10_000 });
+    link = { state: "live" };
+  } catch (err) {
+    noteFailure(err);
+  }
+  console.log(`[link] ${link.state}${link.detail ? ` (${link.detail})` : ""}`);
+}
 
 const MUTATION_SYSTEM = `You are the MUTATION COMPILER for RAGDOLL.AI, a 2D physics combat game.
 The player controls a mechanical goblin ragdoll and types requests to mutate it.
@@ -78,7 +109,7 @@ const app = express();
 app.use(express.json({ limit: "32kb" }));
 
 app.get("/api/status", (_req, res) => {
-  res.json({ live: HAS_KEY, mutationModel: MUTATION_MODEL, directorModel: DIRECTOR_MODEL });
+  res.json({ ...link, mutationModel: MUTATION_MODEL, directorModel: DIRECTOR_MODEL });
 });
 
 app.post("/api/mutate", async (req, res) => {
@@ -101,11 +132,14 @@ app.post("/api/mutate", async (req, res) => {
         20_000,
       );
       out = { plan: MutationPlanSchema.parse(raw), source: "sonnet" };
+      link = { state: "live" };
     } catch (err) {
+      noteFailure(err);
       console.warn("[mutate] model failed, using fallback:", (err as Error).message);
-      out = { plan: fallbackCompile(prompt, owned), source: "fallback", note: (err as Error).message.slice(0, 120) };
+      out = { plan: fallbackCompile(prompt, owned), source: "fallback", note: friendly(err) };
     }
   }
+  out.link = link.state;
   console.log(`[mutate] (${out.source}) "${prompt}" ->`, JSON.stringify(out.plan));
   res.json(out);
 });
@@ -129,13 +163,16 @@ app.post("/api/director", async (req, res) => {
     try {
       const raw = await callStructured(DIRECTOR_MODEL, DIRECTOR_SYSTEM, JSON.stringify(summary), DIRECTOR_JSON_SCHEMA, 25_000);
       out = { decision: DirectorDecisionSchema.parse(raw), source: "opus" };
+      link = { state: "live" };
     } catch (err) {
+      noteFailure(err);
       console.warn("[director] model failed, using fallback:", (err as Error).message);
-      out = { decision: fallbackDirect(summary), source: "fallback", note: (err as Error).message.slice(0, 120) };
+      out = { decision: fallbackDirect(summary), source: "fallback", note: friendly(err) };
     } finally {
       directorBusy = false;
     }
   }
+  out.link = link.state;
   console.log(`[director] (${out.source})`, JSON.stringify(out.decision));
   res.json(out);
 });
@@ -146,5 +183,6 @@ app.use(express.static(dist));
 app.get(/^\/(?!api).*/, (_req, res) => res.sendFile(path.join(dist, "index.html")));
 
 app.listen(PORT, () => {
-  console.log(`RAGDOLL.AI server on :${PORT}  live AI: ${HAS_KEY ? `yes (${MUTATION_MODEL} / ${DIRECTOR_MODEL})` : "no (deterministic fallback)"}`);
+  console.log(`RAGDOLL.AI server on :${PORT}  API key: ${HAS_KEY ? `present (${MUTATION_MODEL} / ${DIRECTOR_MODEL}), verifying…` : "none (deterministic fallback)"}`);
+  void probeLink();
 });

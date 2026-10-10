@@ -43,8 +43,10 @@ html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50%
 #title { text-align: center; }
 .logo { font-family: var(--disp); font-weight: 900; font-size: 26px; letter-spacing: 0.18em; color: #fff; text-shadow: 0 0 12px var(--orange), 0 0 30px rgba(255,122,26,0.5); }
 .logo span { color: var(--cyan); text-shadow: 0 0 12px var(--cyan); }
-.link { margin-top: 2px; font-size: 11px; letter-spacing: 0.15em; color: var(--gold); }
-.link.live { color: #5dff7a; }
+.link { display: inline-block; margin-top: 4px; padding: 2px 10px; background: rgba(0,0,0,0.75); border: 1px solid rgba(255,255,255,0.08); font-size: 11px; letter-spacing: 0.15em; color: var(--gold); }
+.link.live { color: #5dff7a; text-shadow: 0 0 8px rgba(93,255,122,0.6); }
+.link.auth_failed, .link.degraded, .link.offline { color: var(--red); }
+.link.checking { color: var(--cyan); animation: blink 1s infinite; }
 
 /* ---------- director ticker ---------- */
 #director { position: absolute; top: 92px; left: 50%; transform: translateX(-50%); width: min(720px, 60vw); background: var(--panel); border: 1px solid rgba(255,122,26,0.5); border-left: 4px solid var(--orange); padding: 8px 14px; z-index: 2; box-shadow: 0 0 24px rgba(255,122,26,0.15); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%); }
@@ -65,6 +67,8 @@ html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50%
 #tl-list::before { content: ""; position: absolute; left: 6px; top: 4px; bottom: 4px; width: 1px; background: linear-gradient(var(--cyan), transparent); }
 .tl { position: relative; margin-left: 18px; background: var(--panel); border: 1px solid var(--cyan-dim); padding: 6px 8px; font-size: 12px; animation: slidein 0.45s cubic-bezier(.2,1.4,.4,1); }
 .tl::before { content: ""; position: absolute; left: -16px; top: 10px; width: 9px; height: 9px; border: 2px solid var(--cyan); background: var(--bg); transform: rotate(45deg); box-shadow: 0 0 8px var(--cyan); }
+.tl:not(:first-child) { opacity: 0.6; padding: 4px 8px; }
+.tl:not(:first-child) .s { display: none; }
 .tl.pending { border-style: dashed; }
 .tl.pending::before { animation: blink 0.5s infinite; }
 .tl.err { border-color: var(--red); }
@@ -88,12 +92,12 @@ html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50%
 /* ---------- letterbox ---------- */
 .letterbox { position: absolute; left: 0; right: 0; height: 0; background: #000; z-index: 4; transition: height 0.45s cubic-bezier(.6,0,.3,1); }
 .letterbox.top { top: 0; }
-.letterbox.bottom { bottom: 0; }
+.letterbox.bottom { bottom: 118px; }
 #hud.cine .letterbox { height: 9vh; }
-#hud.cine #director, #hud.cine #timeline { opacity: 0.25; }
+#hud.cine #director, #hud.cine #timeline, #hud.cine .chips { opacity: 0.25; transition: opacity 0.3s; }
 
 /* ---------- fuel ---------- */
-#fuel { position: absolute; left: 24px; bottom: 140px; width: 180px; z-index: 2; display: none; }
+#fuel { position: absolute; left: 24px; bottom: 44px; width: 180px; z-index: 2; display: none; }
 #fuel.on { display: block; }
 .fuel-label { font-family: var(--disp); font-size: 10px; letter-spacing: 0.25em; color: var(--orange); }
 .fuel-bar { height: 8px; margin-top: 4px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,122,26,0.5); }
@@ -122,11 +126,17 @@ html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50%
 #gameover { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: rgba(0,0,0,0.55); z-index: 6; }
 #gameover.on { display: flex; }
 .go-title { font-family: var(--disp); font-weight: 900; font-size: 64px; letter-spacing: 0.15em; color: #fff; text-shadow: 0 0 20px var(--orange), 0 0 60px var(--orange); }
+.go-sub { font-family: var(--mono); font-size: 16px; letter-spacing: 0.2em; color: var(--gold); margin-top: -10px; }
+#gameover.lose .go-title { text-shadow: 0 0 20px var(--red), 0 0 60px var(--red); }
+#gameover.lose .go-sub { color: var(--red); }
 #gameover button { pointer-events: auto; font-family: var(--disp); letter-spacing: 0.2em; color: var(--cyan); background: transparent; border: 1px solid var(--cyan); padding: 12px 22px; cursor: pointer; }
 
 /* impact pulse on whole HUD */
 #hud.impact #topbar { animation: hit 0.25s; }
 
+@media (max-width: 1300px) {
+  #fuel { bottom: 128px; }
+}
 @media (max-width: 900px) {
   #timeline, #blueprint { display: none; }
   #director { width: 90vw; top: 110px; }

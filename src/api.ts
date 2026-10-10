@@ -1,5 +1,8 @@
 import { fallbackCompile, fallbackDirect } from "../shared/fallback";
-import type { CombatSummary, ComponentType, DirectorResponse, MutateResponse } from "../shared/mutations";
+import type { CombatSummary, ComponentType, DirectorResponse, LinkState, MutateResponse } from "../shared/mutations";
+import { bus } from "./game/bus";
+
+const reportLink = (state: LinkState | undefined) => state && bus.emit("link", { state });
 
 async function post<T>(url: string, body: unknown, timeoutMs: number): Promise<T> {
   const ctl = new AbortController();
@@ -16,21 +19,27 @@ async function post<T>(url: string, body: unknown, timeoutMs: number): Promise<T
 /** Never throws: falls back to the in-browser deterministic compiler if the server is unreachable. */
 export async function requestMutation(prompt: string, owned: ComponentType[]): Promise<MutateResponse> {
   try {
-    return await post<MutateResponse>("/api/mutate", { prompt, owned }, 25_000);
+    const r = await post<MutateResponse>("/api/mutate", { prompt, owned }, 25_000);
+    reportLink(r.link);
+    return r;
   } catch (e) {
+    reportLink("offline");
     return { plan: fallbackCompile(prompt, owned), source: "fallback", note: `server unreachable (${(e as Error).message})` };
   }
 }
 
 export async function requestDirector(summary: CombatSummary): Promise<DirectorResponse> {
   try {
-    return await post<DirectorResponse>("/api/director", summary, 30_000);
+    const r = await post<DirectorResponse>("/api/director", summary, 30_000);
+    reportLink(r.link);
+    return r;
   } catch (e) {
+    reportLink("offline");
     return { decision: fallbackDirect(summary), source: "fallback", note: `server unreachable (${(e as Error).message})` };
   }
 }
 
-export async function getStatus(): Promise<{ live: boolean; mutationModel: string; directorModel: string } | null> {
+export async function getStatus(): Promise<{ state: LinkState; detail?: string; mutationModel: string; directorModel: string } | null> {
   try {
     const r = await fetch("/api/status");
     return r.ok ? await r.json() : null;

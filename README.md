@@ -16,6 +16,17 @@ Open http://localhost:5173.
 
 **No API key? It still plays.** Without credentials (or when a model call fails, times out, or returns invalid output) the server uses a deterministic keyword compiler and a rule-based director (`shared/fallback.ts`). If the browser can't reach the server at all, it runs the same fallback in-page. The HUD shows which path was used: `SONNET`, `FALLBACK` or `CONSOLE` on each timeline card, and `OPUS · LIVE` or `LOCAL FALLBACK` on the director ticker.
 
+The `LINK:` line under the logo reports the server's *verified* state. At startup the server makes a no-token authenticated call (`models.retrieve`) and then updates the state after every AI request:
+
+| Shown | Meaning |
+|---|---|
+| `LIVE AI · <models>` | an authenticated API call has succeeded |
+| `VERIFYING API KEY…` | key present, startup check still running |
+| `NO API KEY · LOCAL FALLBACK` | no key configured |
+| `AUTH FAILED (HTTP 401) · LOCAL FALLBACK` | key rejected (401/403) |
+| `AI ERROR · LOCAL FALLBACK` | last call failed for another reason (timeout, 5xx, invalid output) |
+| `SERVER OFFLINE · IN-BROWSER FALLBACK` | the browser can't reach `/api` |
+
 ### Production
 
 ```bash
@@ -92,7 +103,7 @@ src/game/textures.ts  all art, generated procedurally at boot
 
 ## Status / known limitations
 
-- **Verified:** typecheck, production build, dev and prod servers, every fallback endpoint, and an invalid-key request that reaches the Anthropic API, gets a 401, and degrades cleanly to the fallback. Browser-tested in headless Chromium: rockets (cinematic plus thrust flight), chain hammer (whirl, slam, damage), shield (blocks and reflects lasers), modify (heavier weapon), rejected invalid command, director events, victory screen.
+- **Verified:** typecheck, production build, dev and prod servers, every fallback endpoint, and an invalid-key request that reaches the Anthropic API, gets a 401, shows `AUTH FAILED` in the HUD, and degrades cleanly to the fallback. Browser-tested in headless Chromium only, not on a real GPU: rockets (cinematic plus thrust flight), chain hammer (whirl, slam, damage), shield (blocks and reflects lasers), modify (heavier weapon), rejected invalid command, director events, victory screen, R restart, and offline in-browser fallback.
 - **Not verified:** a successful live Sonnet/Opus round-trip. No valid key was available during the build, so whether the API accepts the exact structured-output request has not been confirmed.
 - Headless software rendering runs at about 10–30 FPS, so cinematic timing there is slower than on a real GPU. Physics is frame-stepped.
 - The enemy AI is intentionally simple. Destruction is scripted (debris, scorch marks, shoves, ceiling rain), not simulated fracture.

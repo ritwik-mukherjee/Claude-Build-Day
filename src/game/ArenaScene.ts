@@ -38,13 +38,21 @@ export class ArenaScene extends Phaser.Scene {
   baseTimeScale = 1;
   blueprint!: Phaser.GameObjects.Graphics;
   lastImpact = 0;
+  mutations = 0;
+  gen = 0; // bumps on every (re)start so stale async responses are ignored
 
   constructor() {
     super("arena");
   }
 
   create() {
-    buildTextures(this);
+    // Phaser reuses this instance on scene.restart(): reset all per-round state.
+    Object.assign(this, {
+      lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
+      nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
+    });
+    this.gen++;
+    if (!this.textures.exists("px")) buildTextures(this);
     this.matter.world.setGravity(0, 1.25);
     this.matter.world.engine.positionIterations = 10;
     this.matter.world.engine.velocityIterations = 8;
@@ -74,13 +82,17 @@ export class ArenaScene extends Phaser.Scene {
 
     this.matter.world.on("collisionstart", (ev: Phaser.Physics.Matter.Events.CollisionStartEvent) => this.onCollide(ev));
 
-    bus.on("submit-prompt", (text: string) => this.submitPrompt(text));
-    bus.on("console-focus", (f: boolean) => (this.input.keyboard!.enabled = !f));
-    bus.on("restart", () => this.scene.restart());
+    // Remove only *this scene's* listeners on shutdown (the HUD listens to "restart" too).
+    const onSubmit = (text: string) => this.submitPrompt(text);
+    const onFocus = (f: boolean) => (this.input.keyboard!.enabled = !f);
+    const onRestart = () => this.scene.restart();
+    bus.on("submit-prompt", onSubmit);
+    bus.on("console-focus", onFocus);
+    bus.on("restart", onRestart);
     this.events.once("shutdown", () => {
-      bus.off("submit-prompt");
-      bus.off("console-focus");
-      bus.off("restart");
+      bus.off("submit-prompt", onSubmit);
+      bus.off("console-focus", onFocus);
+      bus.off("restart", onRestart);
       this.lasers = [];
     });
     bus.emit(EV.HP, { player: 1, enemy: 1 });
@@ -112,7 +124,7 @@ export class ArenaScene extends Phaser.Scene {
     };
     if (this.cinematic || this.over) Object.assign(inp, { left: false, right: false, jump: false, thrust: false });
     if (Phaser.Input.Keyboard.JustDown(k.Q)) this.trySlam();
-    if (Phaser.Input.Keyboard.JustDown(k.R) && this.over) this.scene.restart();
+    if (Phaser.Input.Keyboard.JustDown(k.R) && this.over) bus.emit("restart");
 
     this.goblin.update(sdt * 60 > 0 ? dt : 0, inp, time);
     if (this.goblin.thrusting && Math.random() < 0.02) this.log("player rocket-boosting");
@@ -154,7 +166,9 @@ export class ArenaScene extends Phaser.Scene {
         if (cmd.error || !cmd.plan) throw new Error(cmd.error ?? "invalid command");
         plan = cmd.plan;
       } else {
+        const gen = this.gen;
         const res = await requestMutation(text, [...this.goblin.comps.keys()]);
+        if (gen !== this.gen) return;
         const v = validatePlan(res.plan); // never trust the wire
         if (!v.plan) throw new Error(`invalid plan: ${v.error}`);
         plan = v.plan;
@@ -164,6 +178,7 @@ export class ArenaScene extends Phaser.Scene {
       bus.emit(EV.MUTATION_PLAN, { plan, source, note, prompt: text });
       this.goblin.scanRing?.setVisible(false);
       await this.playTransformation(plan);
+      this.mutations++;
       bus.emit(EV.MUTATION_DONE, { plan, source });
       bus.emit(EV.LOADOUT, [...this.goblin.comps.keys()]);
       this.log(`player mutated: ${plan.summary}`);
@@ -216,7 +231,7 @@ export class ArenaScene extends Phaser.Scene {
     }
     // Show off what changed.
     const added = plan.operations.filter((o) => o.op !== "remove").map((o) => o.component);
-    if (added.includes("rocket_booster")) g.autoThrust = 0.9;
+    if (added.includes("rocket_booster")) g.autoThrust = 1.3;
   }
 
   private async assemble(op: Operation) {
@@ -556,13 +571,14 @@ export class ArenaScene extends Phaser.Scene {
       for (let i = 0; i < 6; i++) this.time.delayedCall(i * 180, () => this.fx.explosion(sx + Phaser.Math.Between(-60, 60), sy + Phaser.Math.Between(-40, 40), 1.5 + i * 0.2));
       this.time.delayedCall(1200, () => {
         this.spider.body.setVisible(false);
+        this.spider.gfx.setVisible(false);
         this.fx.explosion(sx, sy, 3);
-        bus.emit(EV.GAME_OVER, { winner: "player" });
+        bus.emit(EV.GAME_OVER, { winner: "player", time: this.elapsed, mutations: this.mutations, hp: this.goblin.hp });
       });
       this.say("ARACHNOTRON DECOMMISSIONED. The crowd is… mildly impressed.", "system");
     } else if (this.goblin.hp <= 0) {
       this.over = true;
-      this.time.delayedCall(900, () => bus.emit(EV.GAME_OVER, { winner: "enemy" }));
+      this.time.delayedCall(900, () => bus.emit(EV.GAME_OVER, { winner: "enemy", time: this.elapsed, mutations: this.mutations, hp: 0 }));
       this.say("Goblin reduced to scrap. Reboot with R.", "system");
     }
   }
@@ -590,7 +606,9 @@ export class ArenaScene extends Phaser.Scene {
       playerComponents: [...this.goblin.comps.keys()],
       events: this.events_.slice(-12),
     };
+    const gen = this.gen;
     const res = await requestDirector(summary);
+    if (gen !== this.gen) return;
     this.directorInFlight = false;
     this.nextDirector = Phaser.Math.Between(12, 16);
     if (this.over || !this.scene.isActive()) return;
