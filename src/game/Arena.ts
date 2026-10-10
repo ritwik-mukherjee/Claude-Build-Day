@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Fx } from "./Fx";
 import { MB } from "./util";
 import { Q } from "./quality";
+import { bus } from "./bus";
 
 export const W = 1600;
 export const H = 900;
@@ -24,6 +25,7 @@ export class Arena {
   ];
   lamps: Phaser.Physics.Matter.Image[] = [];
   lampGlows: Phaser.GameObjects.Image[] = [];
+  ambient: Phaser.GameObjects.Image[] = []; // purely decorative glows, hidden in reduced-effects mode
   crates: Phaser.Physics.Matter.Image[] = [];
   gears: Phaser.GameObjects.Graphics[] = [];
   // 2.5D parallax layers (offset by the focus point each frame; pure transforms, no redraw)
@@ -98,6 +100,11 @@ export class Arena {
     tg.lineStyle(4, 0x9aa4ad).strokeCircle(0, 76, 7);
     this.trolley = scene.add.container(W / 2, 40, [tg]).setDepth(7);
     this.warn = scene.add.graphics().setDepth(9);
+    this.ambient.push(...this.lampGlows);
+    const applyQ = () => this.ambient.forEach((a) => a.setVisible(!Q.low));
+    applyQ();
+    bus.on("quality", applyQ);
+    scene.events.once("shutdown", () => bus.off("quality", applyQ));
     this.alarm = scene.add.rectangle(W / 2, H / 2, W, H, 0xff2030, 0).setDepth(900).setScrollFactor(0).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
   }
 
@@ -246,7 +253,7 @@ export class Arena {
       if (!floor) {
         // supports + underglow
         g.fillStyle(0x161b22).fillRect(p.x + 20, p.y + p.h, 10, 40).fillRect(p.x + p.w - 30, p.y + p.h, 10, 40);
-        s.add.image(p.x + p.w / 2, p.y + p.h + 4, "glow").setTint(0x26f0ff).setScale(p.w / 40, 0.4).setAlpha(0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(9);
+        this.ambient.push(s.add.image(p.x + p.w / 2, p.y + p.h + 4, "glow").setTint(0x26f0ff).setScale(p.w / 40, 0.4).setAlpha(0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(9));
       }
     }
     // floor grating lines + vents
