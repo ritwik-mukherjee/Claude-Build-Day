@@ -93,6 +93,7 @@ export class Goblin {
   dmgTakenMul = 1; // Spartan Rage
   speedMul = 1; // Spartan Rage
   frozenT = 0; // Anywhere Door transit: no input, no motion
+  launchT = 0; // scripted leap window (Hulk Smash)
   domeT = 0; // Gremlin dome: invulnerable while > 0
   private jumpHeld = false;
 
@@ -239,6 +240,7 @@ export class Goblin {
     this.invuln -= dt;
     this.stun = Math.max(0, this.stun - dt);
     for (let i = 0; i < this.cds.length; i++) this.cds[i] = Math.max(0, this.cds[i] - dt);
+    this.launchT = Math.max(0, this.launchT - dt);
     if (this.frozenT > 0) {
       this.frozenT -= dt;
       for (const p of this.allBodies()) MB.setVelocity(p, { x: 0, y: 0 });
@@ -255,7 +257,8 @@ export class Goblin {
     const STAND = this.stand;
     this.grounded = dist < STAND + 14;
     if (alive && this.stun <= 0 && this.slamT < 0) {
-      if (this.grounded && !(this.thrusting && t.velocity.y < 0)) {
+      const launched = this.launchT > 0; // scripted leap: don't let the stand spring / ground friction cancel it
+      if (this.grounded && !launched && !(this.thrusting && t.velocity.y < 0)) {
         const want = (dist - STAND) * 0.35;
         MB.setVelocity(t, { x: t.velocity.x, y: t.velocity.y + (want - t.velocity.y) * 0.45 });
       }
@@ -264,7 +267,7 @@ export class Goblin {
       const sp = this.def.speed * this.speedMul;
       const speed = this.grounded ? sp : this.thrusting ? Math.max(8, sp) : sp * 0.77;
       const accel = this.grounded ? 0.25 : 0.08;
-      if (dir !== 0 || this.grounded) MB.setVelocity(t, { x: t.velocity.x + (dir * speed - t.velocity.x) * accel, y: t.velocity.y });
+      if (!launched && (dir !== 0 || this.grounded)) MB.setVelocity(t, { x: t.velocity.x + (dir * speed - t.velocity.x) * accel, y: t.velocity.y });
       // ---- jump ----
       const springs = this.comps.get("spring_legs");
       if (this.grounded) this.airJumpsLeft = this.def.airJumps;

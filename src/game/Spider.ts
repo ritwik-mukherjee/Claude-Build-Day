@@ -88,8 +88,9 @@ export class Spider {
     return this.body.body as Body;
   }
 
-  damage(n: number, fromX: number, knock = 8): number {
-    if (this.dead || this.invuln > 0) return 0;
+  /** force: bypass the brief post-hit invulnerability (used by big ground-slam shockwaves) */
+  damage(n: number, fromX: number, knock = 8, force = false): number {
+    if (this.dead || (this.invuln > 0 && !force)) return 0;
     this.invuln = 0.2;
     const dmg = n * this.vuln * (this.shieldT > 0 ? 0.3 : 1);
     this.hp = Math.max(0, this.hp - dmg);

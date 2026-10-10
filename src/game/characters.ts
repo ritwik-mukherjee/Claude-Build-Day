@@ -4,7 +4,7 @@ import Phaser from "phaser";
 // Playable characters. All four share the same active-ragdoll + mutation system
 // (Goblin.ts); they differ in proportions, physics profile, art and special.
 // ---------------------------------------------------------------------------
-export type CharacterId = "goblin" | "diva" | "gremlin" | "menace" | "kratos" | "doraemon";
+export type CharacterId = "goblin" | "diva" | "gremlin" | "menace" | "kratos" | "doraemon" | "hulk";
 export type SpecialId =
   | "scrap_bomb"
   | "sonic_wave"
@@ -15,7 +15,9 @@ export type SpecialId =
   | "spartan_rage"
   | "air_cannon"
   | "bamboo_copter"
-  | "anywhere_door";
+  | "anywhere_door"
+  | "hulk_smash"
+  | "thunderclap";
 
 export interface AbilityDef {
   id: SpecialId;
@@ -185,6 +187,27 @@ export const IMPORTED: CharacterDef[] = [
     ],
     modelPending: true,
     stats: { speed: 3, power: 2, armor: 3, chaos: 5 },
+  },
+  {
+    id: "hulk",
+    name: "HULK",
+    title: "Imported fighter · model pending",
+    bio: "Very large. Very green. Very unconvinced by the concept of indoor voices.",
+    quote: "“Prototype rig — real model pending import.”",
+    tex: "xh",
+    accent: "#5dbb3a",
+    dims: { torso: [52, 60], head: 20, headOffset: 0, uarm: [18, 34], farm: [19, 34], thigh: [20, 32], shin: [22, 36] },
+    density: 0.006,
+    hp: 180,
+    armor: 0.8,
+    speed: 6,
+    jump: 13.5,
+    airJumps: 0,
+    backTint: 0xa8b0a0,
+    special: { id: "hulk_smash", name: "HULK SMASH", short: "SMASH", desc: "Leap toward the cursor and slam down: huge shockwave, launches the spider.", cooldown: 5 },
+    extra: [{ id: "thunderclap", name: "THUNDERCLAP", short: "CLAP", desc: "Clap shockwave in a forward cone: knockback, brief stun, shatters lasers.", cooldown: 6 }],
+    modelPending: true,
+    stats: { speed: 3, power: 5, armor: 5, chaos: 4 },
   },
 ];
 

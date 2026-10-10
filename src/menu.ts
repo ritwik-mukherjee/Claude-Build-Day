@@ -228,6 +228,7 @@ export function initMenu(game: Phaser.Game) {
     bayOpen = !bayOpen;
     bayBtn.textContent = bayOpen ? "▾ HIDE PROTOTYPE BAY" : `▸ PROTOTYPE BAY · ${IMPORTED.length} imported fighters (models pending)`;
     rosterEl.querySelectorAll(".card.proto").forEach((c) => c.remove());
+    rosterEl.classList.toggle("wide", bayOpen);
     if (bayOpen)
       IMPORTED.forEach((d, k) => {
         const c = addCard(d, CHARACTERS.length + k);
