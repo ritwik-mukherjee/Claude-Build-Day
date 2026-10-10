@@ -26,6 +26,11 @@ export class Arena {
   lampGlows: Phaser.GameObjects.Image[] = [];
   crates: Phaser.Physics.Matter.Image[] = [];
   gears: Phaser.GameObjects.Graphics[] = [];
+  // 2.5D parallax layers (offset by the focus point each frame; pure transforms, no redraw)
+  private mid!: Phaser.GameObjects.Image;
+  private fg!: Phaser.GameObjects.Graphics;
+  private px = 0;
+  private py = 0;
   vents = [400, 1200];
   steam: Phaser.GameObjects.Particles.ParticleEmitter;
   ventActive = 0;
@@ -93,7 +98,7 @@ export class Arena {
     tg.lineStyle(4, 0x9aa4ad).strokeCircle(0, 76, 7);
     this.trolley = scene.add.container(W / 2, 40, [tg]).setDepth(7);
     this.warn = scene.add.graphics().setDepth(9);
-    this.alarm = scene.add.rectangle(W / 2, H / 2, W, H, 0xff2030, 0).setDepth(900).setScrollFactor(0).setBlendMode(Phaser.BlendModes.ADD);
+    this.alarm = scene.add.rectangle(W / 2, H / 2, W, H, 0xff2030, 0).setDepth(900).setScrollFactor(0).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
   }
 
   groundY(x: number, fromY: number): number {
@@ -116,11 +121,11 @@ export class Arena {
     s.add.image(W / 2, FLOOR_Y - 40, "glow").setTint(0xff5a10).setScale(30, 6).setAlpha(0.5).setBlendMode(Phaser.BlendModes.ADD).setDepth(0);
 
     // far silhouettes
-    const far = s.add.graphics().setDepth(1);
+    const far = s.add.graphics();
     far.fillStyle(0x10131a);
-    let x = 0;
+    let x = -90;
     const rnd = new Phaser.Math.RandomDataGenerator(["ragdoll"]);
-    while (x < W) {
+    while (x < W + 90) {
       const w = rnd.between(60, 160),
         h = rnd.between(180, 420);
       far.fillRect(x, FLOOR_Y - h, w, h);
@@ -133,7 +138,7 @@ export class Arena {
       x += w + rnd.between(4, 30);
     }
     // mid: trusses + pipes
-    const mid = s.add.graphics().setDepth(2);
+    const mid = s.add.graphics();
     mid.fillStyle(0x161b22);
     for (const tx of [90, 560, 1040, 1510]) {
       mid.fillRect(tx - 14, 60, 28, FLOOR_Y - 60);
@@ -143,10 +148,10 @@ export class Arena {
         mid.lineBetween(tx + 14, ty, tx - 14, ty + 60);
       }
     }
-    mid.fillStyle(0x1b2129).fillRect(0, 34, W, 22); // ceiling rail
+    mid.fillStyle(0x1b2129).fillRect(-80, 34, W + 160, 22); // ceiling rail
     mid.fillStyle(0xffc83d, 0.6);
-    for (let rx = 0; rx < W; rx += 40) mid.fillTriangle(rx, 56, rx + 20, 56, rx + 10, 50);
-    mid.lineStyle(14, 0x232a33).lineBetween(0, 300, 560, 300).lineBetween(560, 300, 560, 120).lineBetween(1040, 250, W, 250);
+    for (let rx = -80; rx < W + 80; rx += 40) mid.fillTriangle(rx, 56, rx + 20, 56, rx + 10, 50);
+    mid.lineStyle(14, 0x232a33).lineBetween(-80, 300, 560, 300).lineBetween(560, 300, 560, 120).lineBetween(1040, 250, W + 80, 250);
     mid.lineStyle(4, 0x2f3843).lineBetween(0, 294, 560, 294).lineBetween(1040, 244, W, 244);
 
     // big rotating gears
@@ -169,6 +174,34 @@ export class Arena {
       this.gears.push(gear);
     }
 
+    // foreground silhouettes (darkest layer, in front of fighters, only at the frame edges)
+    const fg = s.add.graphics();
+    fg.fillStyle(0x030405, 0.92);
+    fg.fillRect(-60, 0, 86, H).fillRect(W - 26, 0, 86, H); // edge girders
+    fg.fillStyle(0x0b0e12, 1);
+    for (let y = 30; y < H; y += 70) {
+      fg.fillTriangle(26, y, 26, y + 34, 44, y + 17);
+      fg.fillTriangle(W - 26, y, W - 26, y + 34, W - 44, y + 17);
+    }
+    fg.fillStyle(0x030405, 0.95).fillRect(-60, -10, W + 120, 22); // top beam
+    fg.lineStyle(5, 0x07090c, 1);
+    for (const [cx, len] of [
+      [150, 120],
+      [178, 70],
+      [1430, 150],
+      [1462, 90],
+    ]) {
+      for (let y = 12; y < len; y += 12) fg.strokeRect(cx - 3, y - 6, 6, 11); // hanging chains
+    }
+    fg.fillStyle(0xff7a1a, 0.5).fillRect(-60, 10, W + 120, 2);
+
+    // Static layers are baked once into textures: one quad each per frame instead of
+    // re-processing hundreds of vector shapes (big win on integrated GPUs/CPUs).
+    // sky + far skyline share one full-screen texture; the mid layer (and gears) carry the parallax
+    this.bake([g, far], "bg_back", -1, 0);
+    this.mid = this.bake([mid], "bg_mid", 2, 90, 30, 800);
+    this.fg = fg.setDepth(70); // a handful of shapes at the edges: cheaper as vectors than a full-screen quad
+
     // haze
     s.add.rectangle(W / 2, FLOOR_Y - 120, W, 240, 0xff6a20, 0.05).setDepth(3);
 
@@ -177,6 +210,18 @@ export class Arena {
       const b = s.add.image(bx, 120, "glow").setTint(0xff3020).setScale(1.5).setBlendMode(Phaser.BlendModes.ADD).setDepth(4);
       s.tweens.add({ targets: b, alpha: { from: 1, to: 0.1 }, duration: 600, yoyo: true, repeat: -1 });
     }
+  }
+
+  /** Bake vector layers into one texture covering rows [top, top+height) (cropped to save fill-rate). */
+  private bake(gs: Phaser.GameObjects.Graphics[], key: string, depth: number, margin: number, top = 0, height = H) {
+    const s = this.scene;
+    if (!s.textures.exists(key)) {
+      const dt = s.textures.addDynamicTexture(key, W + margin * 2, height)!;
+      for (const g of gs) dt.draw(g, margin, -top);
+      dt.render();
+    }
+    for (const g of gs) g.destroy();
+    return s.add.image(-margin, top, key).setOrigin(0, 0).setDepth(depth);
   }
 
   private drawPlatforms() {
@@ -212,6 +257,18 @@ export class Arena {
       g.fillStyle(0xff7a1a, 0.6);
       for (let i = 0; i < 6; i++) g.fillRect(vx - 30 + i * 11, FLOOR_Y - 2, 6, 5);
     }
+    this.bake([g], "bg_platforms", 10, 0, 400, H - 400);
+  }
+
+  /** 2.5D parallax: layers drift against the focus point (fighter / camera). */
+  parallax(fx: number, fy: number) {
+    const tx = (fx - W / 2) / (W / 2),
+      ty = (fy - H / 2) / (H / 2);
+    this.px += (tx - this.px) * 0.06;
+    this.py += (ty - this.py) * 0.06;
+    this.mid.setPosition(-90 - this.px * 42, 30 - this.py * 14);
+    for (const g of this.gears) g.setData("ox", g.getData("ox") ?? g.x).setX(g.getData("ox") - this.px * 42);
+    this.fg.setPosition(this.px * 26, this.py * 6);
   }
 
   update(time: number, dt: number) {
@@ -275,7 +332,9 @@ export class Arena {
   }
 
   alarmPulse() {
-    this.scene.tweens.add({ targets: this.alarm, fillAlpha: { from: 0.18, to: 0 }, duration: 350, repeat: 2 });
+    // full-screen additive quad: only visible while pulsing (saves fill-rate the rest of the time)
+    this.alarm.setVisible(true);
+    this.scene.tweens.add({ targets: this.alarm, fillAlpha: { from: 0.18, to: 0 }, duration: 350, repeat: 2, onComplete: () => this.alarm.setVisible(false) });
   }
 
   /** Telegraphed crane crate drop at x. */

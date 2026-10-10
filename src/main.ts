@@ -6,6 +6,7 @@ import { ArenaScene } from "./game/ArenaScene";
 import { bus, EV } from "./game/bus";
 import type { MutationPlan } from "../shared/mutations";
 import { initMenu } from "./menu";
+import { initPerf } from "./perf";
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -47,6 +48,7 @@ $("#chips").addEventListener("click", (e) => {
   b.blur();
 });
 initMenu(game);
+initPerf(game);
 
 input.addEventListener("focus", () => bus.emit("console-focus", true));
 input.addEventListener("blur", () => bus.emit("console-focus", false));

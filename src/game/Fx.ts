@@ -64,7 +64,8 @@ export class Fx {
       .rectangle(0, 0, 4000, 4000, 0xffffff, 0)
       .setScrollFactor(0)
       .setDepth(1000)
-      .setBlendMode(Phaser.BlendModes.ADD);
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setVisible(false);
   }
 
   private n(v: number) {
@@ -93,9 +94,10 @@ export class Fx {
   }
 
   flash(alpha = 0.6, duration = 160, color = 0xffffff) {
-    this.flashRect.setFillStyle(color, alpha);
+    this.flashRect.setFillStyle(color, alpha).setVisible(true);
     this.scene.tweens.killTweensOf(this.flashRect);
-    this.scene.tweens.add({ targets: this.flashRect, fillAlpha: 0, duration });
+    // full-screen additive quad: hidden when idle so it costs no fill-rate
+    this.scene.tweens.add({ targets: this.flashRect, fillAlpha: 0, duration, onComplete: () => this.flashRect.setVisible(false) });
   }
 
   shake(duration = 250, intensity = 0.01) {

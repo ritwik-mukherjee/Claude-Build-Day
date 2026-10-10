@@ -41,6 +41,9 @@ export function buildTextures(scene: Phaser.Scene) {
     g.fillStyle(0x5a6068, 1).fillPoints([new Phaser.Math.Vector2(0, 4), new Phaser.Math.Vector2(9, 0), new Phaser.Math.Vector2(14, 7), new Phaser.Math.Vector2(5, 12)], true);
     g.lineStyle(1, 0xff9a3c, 0.8).strokeLineShape(new Phaser.Geom.Line(2, 4, 9, 1));
   });
+  tex(scene, "shadow", 64, 16, (g) => {
+    for (let r = 8; r > 0; r -= 1) g.fillStyle(0x000000, 0.09).fillEllipse(32, 8, r * 8, r * 2);
+  });
   tex(scene, "ring", 128, 128, (g) => {
     g.lineStyle(6, 0xffffff, 1).strokeCircle(64, 64, 58);
   });

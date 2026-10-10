@@ -230,7 +230,7 @@ export function initMenu(game: Phaser.Game) {
   );
   renderPers();
   const fxBtn = $("#btn-fx");
-  const renderFx = () => (fxBtn.textContent = Q.low ? "FX: LOW" : "FX: HIGH");
+  const renderFx = () => (fxBtn.textContent = Q.low ? "FX LO" : "FX HI");
   fxBtn.addEventListener("click", () => {
     Q.set(!Q.low);
     renderFx();
@@ -238,7 +238,8 @@ export function initMenu(game: Phaser.Game) {
   });
   const b3d = $("#btn-3d");
   const render3d = () => {
-    b3d.textContent = Q.low ? "3D: OFF (low fx)" : Q.chamber ? "3D: ON" : "3D: OFF";
+    b3d.textContent = Q.low ? "3D –" : Q.chamber ? "3D ✓" : "3D ✗";
+    b3d.title = Q.low ? "3D Mutation Chamber is off in reduced-effects mode" : "Three.js Mutation Chamber cinematic (click to toggle)";
   };
   b3d.addEventListener("click", () => {
     Q.setChamber(!Q.chamber);
@@ -292,7 +293,8 @@ export function initMenu(game: Phaser.Game) {
     $(".hp.left .hp-name").innerHTML = `${d.name.replace(" ", " <span>")}</span>`;
     $(".hp.left").style.setProperty("--accent", d.accent);
     $("#special .sp-name").textContent = d.special.name;
-    $("#btn-mode").textContent = mode === "lab" ? "▶ ARENA (keep build)" : "⚗ LAB (keep build)";
+    $("#btn-mode").textContent = mode === "lab" ? "▶ ARENA" : "⚗ LAB";
+    $("#btn-mode").title = mode === "lab" ? "Take this build into the arena" : "Open the Character Lab (keeps your build)";
     $("#lp-name").textContent = `${d.name} — ${d.title}`;
     $("#lp-sp").textContent = d.special.name;
     $("#lp-sp-desc").textContent = d.special.desc;

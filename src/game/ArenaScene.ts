@@ -62,6 +62,9 @@ export class ArenaScene extends Phaser.Scene {
   dome?: Phaser.GameObjects.Image;
   poundT = -1;
   domeHitCd = 0;
+  shadows: Phaser.GameObjects.Image[] = [];
+  backlights: Phaser.GameObjects.Image[] = [];
+  wasThrusting = false;
 
   constructor() {
     super("arena");
@@ -78,7 +81,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this, {
       lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
       nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
-      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [],
+      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false,
     });
     this.gen++;
     if (!this.textures.exists("px")) buildTextures(this);
@@ -151,6 +154,13 @@ export class ArenaScene extends Phaser.Scene {
       this.spider.body.setVisible(false);
       this.spider.gfx.setVisible(false);
     }
+    // 2.5D depth cues: contact shadows + colored backlights (cheap sprites updated per frame)
+    this.shadows = [0, 1].map(() => this.add.image(0, 0, "shadow").setDepth(12));
+    this.backlights = [
+      this.add.image(0, 0, "glow").setDepth(17).setTint(Phaser.Display.Color.HexStringToColor(def.accent).color).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.22),
+      this.add.image(0, 0, "glow").setDepth(23).setTint(0xff3344).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.18),
+    ];
+    if (this.cfg.mode === "menu") [...this.shadows, ...this.backlights].forEach((o) => o.setVisible(false));
     this.dome = this.add.image(0, 0, "dome").setDepth(26).setTint(0x26f0ff).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
     bus.emit(EV.HP, { player: 1, enemy: 1 });
     bus.emit(EV.LOADOUT, []);
@@ -231,6 +241,7 @@ export class ArenaScene extends Phaser.Scene {
     if (steps === 4) this.acc = 0; // drop backlog instead of spiralling
     this.goblin.render(time);
     this.spider.render(time);
+    this.renderDepth();
     if (this.goblin.thrusting && Math.random() < 0.02) this.log("player rocket-boosting");
 
     bus.emit(EV.FUEL, this.goblin.comps.has("rocket_booster") ? this.goblin.fuel : -1);
@@ -247,6 +258,38 @@ export class ArenaScene extends Phaser.Scene {
     }
     if (this.cfg.mode === "lab") this.labTick();
     else this.checkGameOver();
+  }
+
+  private renderDepth() {
+    const g = this.goblin,
+      sp = this.spider;
+    const fighters: [number, number, number][] = [
+      [g.x, g.y, g.def.dims.torso[0] * 1.6],
+      [sp.x, sp.y, 150],
+    ];
+    fighters.forEach(([x, y, w], i) => {
+      const gy = this.arena.groundY(x, y);
+      const h = Math.max(0, gy - y);
+      const k = Phaser.Math.Clamp(1 - (h - 60) / 400, 0.25, 1);
+      const vis = !(i === 1 && sp.dead) && gy < H + 50;
+      this.shadows[i].setVisible(vis).setPosition(x, gy - 1).setDisplaySize(w * 1.2 * k, 20 * k).setAlpha(k);
+      this.backlights[i].setVisible(vis).setPosition(x, y - (i === 0 ? 10 : 0)).setScale(i === 0 ? 2.6 : 3.6);
+    });
+    this.arena.parallax(g.x, g.y);
+    // launch punch: dust ring + tiny zoom kick on the rising edge of rocket thrust
+    if (g.thrusting && !this.wasThrusting && !this.cinematic) {
+      const gy = this.arena.groundY(g.x, g.y);
+      if (gy - g.y < g.stand + 40) {
+        this.fx.smokePuff(g.x, gy, 6);
+        this.fx.shockwave(g.x, gy, 0xff9a3c, 1.6, 380);
+      }
+      const cam = this.cameras.main;
+      if (cam.zoom === 1) {
+        cam.setZoom(1.025);
+        this.tweens.add({ targets: cam, zoom: 1, duration: 300, ease: "Cubic.easeOut" });
+      }
+    }
+    this.wasThrusting = g.thrusting;
   }
 
   // ---------------------------------------------------------------------
