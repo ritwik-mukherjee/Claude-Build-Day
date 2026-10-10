@@ -150,7 +150,19 @@ export function initMenu(game: Phaser.Game) {
     renderFx();
     fxBtn.blur();
   });
-  bus.on("quality", renderFx);
+  const b3d = $("#btn-3d");
+  const render3d = () => {
+    b3d.textContent = Q.low ? "3D: OFF (low fx)" : Q.chamber ? "3D: ON" : "3D: OFF";
+  };
+  b3d.addEventListener("click", () => {
+    Q.setChamber(!Q.chamber);
+    b3d.blur();
+  });
+  bus.on("quality", () => {
+    renderFx();
+    render3d();
+  });
+  render3d();
   document.body.classList.toggle("lowfx", Q.low);
   renderFx();
 

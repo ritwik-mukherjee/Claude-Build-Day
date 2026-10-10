@@ -397,7 +397,7 @@ export class ArenaScene extends Phaser.Scene {
       }
       bus.emit(EV.MUTATION_PLAN, { plan, source, note, prompt: text });
       this.goblin.scanRing?.setVisible(false);
-      await this.playTransformation(plan);
+      await this.playTransformation(plan, source);
       this.mutations++;
       bus.emit(EV.MUTATION_DONE, { plan, source });
       this.emitLoadout();
@@ -416,7 +416,73 @@ export class ArenaScene extends Phaser.Scene {
     return new Promise<void>((r) => this.time.delayedCall(ms, r));
   }
 
-  private async playTransformation(plan: MutationPlan) {
+  /** Apply every op through the shared executor; returns real per-op results. */
+  private async applyPlan(plan: MutationPlan) {
+    const results: { op: Operation; ok: boolean }[] = [];
+    for (const op of plan.operations) {
+      const r = await dispatch(op);
+      if (r.ok) {
+        if (op.op === "remove") this.applied = this.applied.filter((a) => a.component !== op.component);
+        else this.applied.push(op);
+      }
+      results.push({ op, ok: r.ok });
+    }
+    return results;
+  }
+
+  private async playTransformation(plan: MutationPlan, source = "fallback") {
+    // Preferred path: Three.js Mutation Chamber (lazy-loaded). Falls back to the 2D cinematic
+    // if disabled, in reduced-effects mode, or if WebGL/three fails before the plan is applied.
+    if (Q.useChamber) {
+      let applied: { op: Operation; ok: boolean }[] | null = null;
+      this.cinematic = true;
+      try {
+        const { runChamber } = await import("../chamber/Chamber");
+        await runChamber(plan, {
+          source,
+          low: Q.low,
+          sleepGame: () => this.game.loop.sleep(),
+          wakeGame: () => this.game.loop.wake(),
+          apply: async () => (applied = await this.applyPlan(plan)),
+        });
+      } catch (e) {
+        console.warn("[chamber] unavailable, using 2D cinematic:", e);
+        this.game.loop.wake();
+      }
+      this.cinematic = false;
+      if (applied) {
+        this.arrivalBeat(applied);
+        return;
+      }
+    }
+    await this.playTransformation2D(plan);
+  }
+
+  /** Short in-arena payoff after the 3D chamber: sparks at each mounted socket, ignition, show-off. */
+  private arrivalBeat(results: { op: Operation; ok: boolean }[]) {
+    const g = this.goblin;
+    this.fx.flash(0.35, 260, 0xbffcff);
+    for (const { op, ok } of results) {
+      const p = g.socketPos(op.socket);
+      if (!ok) {
+        this.fx.floatText(p.x, p.y - 40, "FABRICATION FAULT", "#ff3344", 16);
+        continue;
+      }
+      if (op.op === "remove") continue;
+      this.fx.burst(p.x, p.y, 30, true);
+      this.fx.shockwave(p.x, p.y, 0x26f0ff, 1.6, 400);
+      if (op.component === "rocket_booster") {
+        this.fx.explosion(p.x, p.y + 30, 1.1);
+        g.autoThrust = 1.3;
+      } else if (op.component === "boxing_glove") {
+        const gl = g.comps.get("boxing_glove")?.head;
+        if (gl) g.punch(gl.x + g.facing * 200, gl.y - 20);
+      }
+    }
+    this.fx.floatText(g.x, g.y - 110, results.some((r) => r.ok) ? "MUTATION ONLINE" : "MUTATION FAILED", results.some((r) => r.ok) ? "#26f0ff" : "#ff3344", 24);
+  }
+
+  private async playTransformation2D(plan: MutationPlan) {
     const cam = this.cameras.main;
     const g = this.goblin;
     this.cinematic = true;

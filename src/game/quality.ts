@@ -12,12 +12,33 @@ try {
   /* storage unavailable */
 }
 
+let chamberStored: string | null = null;
+try {
+  chamberStored = localStorage.getItem("ragdoll.chamber3d");
+} catch {
+  /* ignore */
+}
+
 let slowFrames = 0;
 let window_ = 0;
 let auto = stored === null; // only auto-switch if the user never chose
 
 export const Q = {
   low: stored === "1",
+  /** 3D Mutation Chamber preference (on by default; never used in reduced-effects mode) */
+  chamber: chamberStored !== "0",
+  get useChamber() {
+    return this.chamber && !this.low;
+  },
+  setChamber(on: boolean) {
+    this.chamber = on;
+    try {
+      localStorage.setItem("ragdoll.chamber3d", on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    bus.emit("quality", this.low);
+  },
   /** particle count multiplier */
   get k() {
     return this.low ? 0.45 : 1;
