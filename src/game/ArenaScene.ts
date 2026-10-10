@@ -12,6 +12,7 @@ import { buildCharacterTextures, charById, type CharacterId } from "./characters
 import { Q } from "./quality";
 import { challengeById } from "./challenges";
 import { Abilities } from "./abilities";
+import { AbilityVfx, preloadVfx } from "./vfx";
 import { abilitiesOf } from "./characters";
 import { MB } from "./util";
 import { state as menuState } from "../menu";
@@ -68,6 +69,7 @@ export class ArenaScene extends Phaser.Scene {
   backlights: Phaser.GameObjects.Image[] = [];
   wasThrusting = false;
   ab!: Abilities;
+  vfx!: AbilityVfx;
   lastAb = "";
   lastFuel = -2;
   lastCd = -1;
@@ -78,6 +80,10 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   applied: Operation[] = []; // successfully dispatched ops this round (for carrying builds)
+
+  preload() {
+    preloadVfx(this); // Kenney CC0 sprites (skipped once cached; procedural fallbacks if missing)
+  }
 
   init(data: Partial<RoundCfg>) {
     if (data && data.mode) this.cfg = { mode: data.mode, char: data.char ?? "goblin", challenge: data.challenge, ops: data.ops };
@@ -106,6 +112,7 @@ export class ArenaScene extends Phaser.Scene {
     this.spider = new Spider(this, 1250, FLOOR_Y - 100, this.arena, this.fx, (l) => this.lasers.push(l), (x, y, p) => this.spiderSlam(x, y, p));
     this.blueprint = this.add.graphics().setDepth(50);
     this.ab = new Abilities(this);
+    this.vfx = new AbilityVfx(this);
     if (this.cfg.mode === "arena") {
       const ch = challengeById(this.cfg.challenge);
       if (ch.playerHpMul) this.goblin.hp = this.goblin.maxHp = Math.round(this.goblin.maxHp * ch.playerHpMul);
@@ -222,7 +229,11 @@ export class ArenaScene extends Phaser.Scene {
     if (this.hitStop > 0) {
       this.hitStop -= dt;
       this.matter.world.engine.timing.timeScale = 0.08;
-    } else this.matter.world.engine.timing.timeScale = this.baseTimeScale;
+      this.tweens.timeScale = 0.2; // true freeze-frame: VFX tweens pause with the physics
+    } else {
+      this.matter.world.engine.timing.timeScale = this.baseTimeScale;
+      this.tweens.timeScale = 1;
+    }
     const ts = this.matter.world.engine.timing.timeScale;
 
     if (!this.over && !this.cinematic) this.elapsed += dt;

@@ -123,7 +123,7 @@ export class Fx {
     this.smoke.explode(this.n(8 * power), x, y);
     this.shockwave(x, y, 0xffc83d, 2 + power * 1.5);
     if (power > 1.5) this.shockwave(x, y, 0xff3344, 1 + power, 700);
-    this.flash(Math.min(0.4, 0.14 * power), 180, 0xffd8a0); // capped so big hits never white-out the fighters
+    this.flash(Math.min(0.3, 0.11 * power), 180, 0xffd8a0); // capped so big hits never wash out the fighters
     this.shake(250 + 120 * power, 0.006 * power);
     this.spawnDebris(x, y, this.n(6 * power));
   }

@@ -437,18 +437,20 @@ export class Abilities {
   // ======================================================================
   // HULK — Smash (targeted leap + slam through the existing impact path)
   // ======================================================================
-  smash: { t: number; phase: "rise" | "fall"; tx: number } | null = null;
+  smash: { t: number; phase: "windup" | "rise" | "fall"; tx: number } | null = null;
 
   private startSmash(inp: AbilityInput) {
     if (this.smash) return false;
     const g = this.s.goblin;
     // aim at the cursor, but bounded: max 520 px of travel, never out of the arena
     const tx = Phaser.Math.Clamp(Phaser.Math.Clamp(inp.aimX, g.x - 520, g.x + 520), 90, W - 90);
-    const vx = (tx - g.x) / 34;
-    for (const p of g.allBodies()) MB.setVelocity(p, { x: vx, y: -17 });
-    g.launchT = 2; // released on landing
-    this.smash = { t: 0, phase: "rise", tx };
-    this.s.fx.smokePuff(g.x, this.s.arena.groundY(g.x, g.y), 6);
+    // 0.14 s anticipation: crouch + arms drawn back, energy gathers (damage/cooldown unchanged)
+    g.launchT = 2.3; // released on landing
+    for (const p of g.parts) MB.setVelocity(p.body as Body, { x: 0, y: 4 });
+    MB.setVelocity(g.farmL.body as Body, { x: -g.facing * 10, y: -8 });
+    MB.setVelocity(g.farmR.body as Body, { x: -g.facing * 10, y: -8 });
+    this.smash = { t: 0, phase: "windup", tx };
+    this.s.vfx.smashWindup(g.x, this.s.arena.groundY(g.x, g.y));
     this.s.fx.floatText(g.x, g.y - 110, "HULK SMASH!", "#5dbb3a", 30);
     this.s.log("player used special HULK SMASH");
     return true;
@@ -459,6 +461,15 @@ export class Abilities {
     if (!sm) return;
     const g = this.s.goblin;
     sm.t += dt;
+    if (sm.phase === "windup") {
+      if (sm.t < 0.14) return;
+      sm.phase = "rise";
+      sm.t = 0;
+      const vx = (sm.tx - g.x) / 34;
+      for (const p of g.allBodies()) MB.setVelocity(p, { x: vx, y: -17 });
+      this.s.vfx.smashLaunch(g.x, this.s.arena.groundY(g.x, g.y));
+      return;
+    }
     // steer toward the landing point every step (air drag on the ragdoll would otherwise undershoot)
     const t = g.torso.body as Body;
     MB.setVelocity(t, { x: Phaser.Math.Clamp((sm.tx - g.x) * 0.12, -14, 14), y: t.velocity.y });
@@ -471,6 +482,7 @@ export class Abilities {
       this.smash = null;
       g.launchT = 0;
       const gy = this.s.arena.groundY(g.x, g.y);
+      this.s.vfx.smashImpact(g.x, gy); // signature layer (rings, ripple, dust, chunks, decal)
       this.s.impact(g.x, gy, 2.8, true); // existing set piece: explosion, crack, shove, shockwave damage
       const sp = this.s.spider;
       if (!sp.dead && Math.abs(sp.x - g.x) < 260 && Math.abs(sp.y - g.y) < 220) {
@@ -486,7 +498,20 @@ export class Abilities {
   // ======================================================================
   // HULK — Thunderclap (forward cone shockwave)
   // ======================================================================
+  clapT = -1;
+
   private thunderclap() {
+    if (this.clapT >= 0) return false;
+    const g = this.s.goblin;
+    // 0.12 s brace: arms raised, air drawn in, then release (rules and cooldown unchanged)
+    MB.setVelocity(g.farmL.body as Body, { x: -g.facing * 4, y: -14 });
+    MB.setVelocity(g.farmR.body as Body, { x: -g.facing * 4, y: -14 });
+    this.s.vfx.clapWindup(g.x + g.facing * 40, g.y - 10);
+    this.clapT = 0.12;
+    return true;
+  }
+
+  private releaseClap() {
     const g = this.s.goblin;
     const f = g.facing;
     const cx = g.x + f * 40,
@@ -502,11 +527,7 @@ export class Abilities {
       const d = Math.hypot(dx, dy);
       return dx > 0 && d < R && Math.abs(Math.atan2(dy, dx)) < HALF;
     };
-    // visuals: flattened rings racing forward + central burst
-    for (let i = 0; i < 3; i++) {
-      const r = this.s.add.image(cx, cy, "ring").setTint(0xd8ffd0).setBlendMode(Phaser.BlendModes.ADD).setDepth(44).setScale(0.25, 0.5);
-      this.s.tweens.add({ targets: r, x: cx + f * (260 + i * 60), scaleX: 0.6 + i * 0.2, scaleY: 1.6 + i * 0.4, alpha: 0, delay: i * 70, duration: 420, ease: "Cubic.easeOut", onComplete: () => r.destroy() });
-    }
+    this.s.vfx.clapRelease(cx, cy, f, R, HALF);
     this.s.fx.shockwave(cx, cy, 0xffffff, 1.6, 260);
     this.s.fx.burst(cx, cy, 24);
     this.s.cameras.main.shake(260, 0.008);
@@ -520,6 +541,7 @@ export class Abilities {
       MB.setVelocity(sp.b, { x: f * 22, y: -6 });
       sp.state = "stunned";
       sp.stateT = 1.0;
+      this.s.vfx.clapHit(sp.x - f * 30, sp.y);
       this.s.fx.floatText(sp.x, sp.y - 70, `-${Math.round(d)} STUNNED`, "#d8ffd0", 24);
       this.s.log(`thunderclap hit spider for ${Math.round(d)}`);
       this.s.emitHp();
@@ -530,12 +552,32 @@ export class Abilities {
         l.life = 0;
       }
     for (const c of this.s.arena.crates) if (inCone(c.x, c.y)) MB.setVelocity(c.body as Body, { x: f * 16, y: -8 });
-    return true;
+    // loose debris in the cone is blown away from the clap centre
+    for (const b of this.s.matter.world.getAllBodies() as Body[])
+      if (b.collisionFilter.group === -9 && inCone(b.position.x, b.position.y)) MB.setVelocity(b, { x: f * 14, y: b.velocity.y - 4 });
   }
 
   // ======================================================================
+  private wasGrounded = true;
+  private airVy = 0;
+
   step(dt: number, inp: AbilityInput) {
     this.smashStep(dt);
+    if (this.clapT >= 0) {
+      this.clapT -= dt;
+      if (this.clapT < 0) {
+        this.clapT = -1;
+        if (this.s.goblin.hp > 0 && !this.s.over) this.releaseClap();
+      }
+    }
+    // Hulk weight: every hard landing kicks up a dust ring
+    const g = this.s.goblin;
+    if (g.def.id === "hulk") {
+      if (!g.grounded) this.airVy = Math.max(this.airVy, (g.torso.body as Body).velocity.y);
+      else if (!this.wasGrounded && this.airVy > 7 && !this.smash) this.s.vfx.heavyLanding(g.x, this.s.arena.groundY(g.x, g.y));
+      if (g.grounded) this.airVy = 0;
+      this.wasGrounded = g.grounded;
+    }
     this.axeStep(dt);
     this.airStep(dt);
     this.copterStep(dt, inp);
@@ -575,6 +617,7 @@ export class Abilities {
     this.air = [];
     this.copterT = this.safeFallT = this.rageT = 0;
     this.smash = null;
+    this.clapT = -1;
     this.clearDoors();
     void FLOOR_Y;
   }
