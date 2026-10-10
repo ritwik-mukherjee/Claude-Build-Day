@@ -320,3 +320,17 @@ body.mode-lab #labpanel { display: block; }
   #console { width: 54vw; left: 44%; }
   #prompt { font-size: 15px; }
 }
+
+/* prototype bay open: 7 cards must fit the width */
+.roster.wide { gap: 10px; }
+.roster.wide .card { width: clamp(120px, 12.4vw, 190px); }
+.roster.wide .card .pf { height: clamp(120px, 12vw, 170px); }
+.roster.wide .card .cn { font-size: 12px; }
+.roster.wide .stats { padding: 0 8px; }
+.roster.wide .stat i { width: 10px; }
+/* short laptop screens (≤ 820 px tall, e.g. 1366×768) */
+@media (max-height: 820px) {
+  .sel-detail { display: none; }
+  .sel-logo { font-size: 40px; }
+  #select { gap: 12px; }
+}

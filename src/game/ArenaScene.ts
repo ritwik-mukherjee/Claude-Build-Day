@@ -854,9 +854,12 @@ export class ArenaScene extends Phaser.Scene {
     if (ground && !this.spider.dead && (this.goblin.slamming || power > 2.2)) {
       const d = Phaser.Math.Distance.Between(x, y, this.spider.x, this.spider.y + 80);
       if (d < 140 + 60 * power) {
-        const dmg = this.spider.damage(6 * power, x, 10);
-        this.fx.floatText(this.spider.x, this.spider.y - 70, `-${Math.round(dmg)}`, "#ffc83d", 26);
-        this.log(`shockwave hit spider for ${Math.round(dmg)}`);
+        // big slams bypass the 0.2 s post-hit invulnerability (impact() is already throttled to 300 ms)
+        const dmg = this.spider.damage(6 * power, x, 10, true);
+        if (dmg > 0) {
+          this.fx.floatText(this.spider.x, this.spider.y - 70, `-${Math.round(dmg)}`, "#ffc83d", 26);
+          this.log(`shockwave hit spider for ${Math.round(dmg)}`);
+        }
       }
     }
     if (power > 1.8) {
