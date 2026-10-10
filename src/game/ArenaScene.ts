@@ -15,6 +15,7 @@ import { Abilities } from "./abilities";
 import { AbilityVfx, preloadVfx } from "./vfx";
 import { abilitiesOf } from "./characters";
 import { MB } from "./util";
+import { preloadSmash } from "./smashAnim";
 import { state as menuState } from "../menu";
 
 export type Mode = "menu" | "arena" | "lab";
@@ -90,6 +91,7 @@ export class ArenaScene extends Phaser.Scene {
     // ragdoll part sprites pre-rendered from the real Hulk glTF (scripts/bake); if any fail to
     // load, buildCharacterTextures falls back to the procedural prototype rig for that key
     for (const p of ["torso", "head", "uarm", "farm", "thigh", "shin"]) if (!this.textures.exists(`xh_${p}`)) this.load.image(`xh_${p}`, `${import.meta.env.BASE_URL}assets/sprites/hulk/${p}.png`);
+    preloadSmash(this); // Hulk Smash frames rendered from the same model
   }
 
   init(data: Partial<RoundCfg>) {
@@ -861,7 +863,7 @@ export class ArenaScene extends Phaser.Scene {
     bus.emit(EV.IMPACT, { power });
     if (ground) {
       this.arena.crack(x, Math.min(y, FLOOR_Y + 2), 0.6 + power * 0.4);
-      this.fx.floatText(x, y - 70, power > 2 ? "MEGA IMPACT" : "IMPACT", "#ff7a1a", 20 + power * 8);
+      this.fx.floatText(x, y - 240, power > 2 ? "MEGA IMPACT" : "IMPACT", "#ff7a1a", 20 + power * 8); // above the fighter, not over them
     }
     const loose = [
       this.spider.b,

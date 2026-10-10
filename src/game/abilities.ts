@@ -9,6 +9,7 @@ import type { SpecialId } from "./characters";
 import { MB } from "./util";
 import { Q } from "./quality";
 import { PLAYER_GROUP } from "./Goblin";
+import { SmashAnim } from "./smashAnim";
 
 type Body = MatterJS.BodyType;
 type Img = Phaser.Physics.Matter.Image;
@@ -438,18 +439,26 @@ export class Abilities {
   // HULK — Smash (targeted leap + slam through the existing impact path)
   // ======================================================================
   smash: { t: number; phase: "windup" | "rise" | "fall"; tx: number } | null = null;
+  /** model-rendered Smash animation (Hulk only; null if the sheet isn't available) */
+  private smashAnim: SmashAnim | null | undefined;
 
   private startSmash(inp: AbilityInput) {
     if (this.smash) return false;
     const g = this.s.goblin;
-    // aim at the cursor, but bounded: max 520 px of travel, never out of the arena
-    const tx = Phaser.Math.Clamp(Phaser.Math.Clamp(inp.aimX, g.x - 520, g.x + 520), 90, W - 90);
+    // aim at the cursor, but bounded: max 520 px of travel, never out of the arena.
+    // Aim assist: a cursor near the spider lands Hulk right beside it (inside the shockwave + launch range).
+    const sp = this.s.spider;
+    let aim = inp.aimX;
+    if (!sp.dead && Math.abs(inp.aimX - sp.x) < 220) aim = sp.x - Math.sign(sp.x - g.x || 1) * 70;
+    const tx = Phaser.Math.Clamp(Phaser.Math.Clamp(aim, g.x - 520, g.x + 520), 90, W - 90);
     // 0.14 s anticipation: crouch + arms drawn back, energy gathers (damage/cooldown unchanged)
     g.launchT = 2.3; // released on landing
     for (const p of g.parts) MB.setVelocity(p.body as Body, { x: 0, y: 4 });
     MB.setVelocity(g.farmL.body as Body, { x: -g.facing * 10, y: -8 });
     MB.setVelocity(g.farmR.body as Body, { x: -g.facing * 10, y: -8 });
     this.smash = { t: 0, phase: "windup", tx };
+    if (this.smashAnim === undefined) this.smashAnim = g.def.id === "hulk" ? SmashAnim.create(this.s) : null;
+    this.smashAnim?.begin();
     this.s.vfx.smashWindup(g.x, this.s.arena.groundY(g.x, g.y));
     this.s.fx.floatText(g.x, g.y - 110, "HULK SMASH!", "#5dbb3a", 30);
     this.s.log("player used special HULK SMASH");
@@ -482,6 +491,7 @@ export class Abilities {
       this.smash = null;
       g.launchT = 0;
       const gy = this.s.arena.groundY(g.x, g.y);
+      this.smashAnim?.impact(gy);
       this.s.vfx.smashImpact(g.x, gy); // signature layer (rings, ripple, dust, chunks, decal)
       this.s.impact(g.x, gy, 2.8, true); // existing set piece: explosion, crack, shove, shockwave damage
       const sp = this.s.spider;
@@ -492,6 +502,7 @@ export class Abilities {
     } else if (sm.t > 2 || g.hp <= 0) {
       this.smash = null; // hard cap / defeat
       g.launchT = 0;
+      this.smashAnim?.end();
     }
   }
 
@@ -593,6 +604,7 @@ export class Abilities {
   /** per-frame visuals */
   render(time: number) {
     const g = this.s.goblin;
+    this.smashAnim?.render(time, this.smash);
     if (this.axe && this.axeTrail) this.axeTrail.emitParticleAt(this.axe.img.x, this.axe.img.y, Q.low ? 1 : 2);
     if (this.rotor) {
       const on = this.copterT > 0;
@@ -617,6 +629,7 @@ export class Abilities {
     this.air = [];
     this.copterT = this.safeFallT = this.rageT = 0;
     this.smash = null;
+    this.smashAnim?.end();
     this.clapT = -1;
     this.clearDoors();
     void FLOOR_Y;
