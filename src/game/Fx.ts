@@ -93,12 +93,15 @@ export class Fx {
     const t = this.scene.add
       .text(x, y, text, { fontFamily: "Orbitron, monospace", fontSize: `${size}px`, fontStyle: "900", color, stroke: "#000", strokeThickness: 5 })
       .setOrigin(0.5)
-      .setDepth(60);
-    this.scene.tweens.add({ targets: t, y: y - 60, alpha: { from: 1, to: 0 }, scale: { from: 1.4, to: 1 }, duration: 900, ease: "Cubic.easeOut", onComplete: () => t.destroy() });
+      .setDepth(1001);
+    this.scene.tweens.add({ targets: t, y: y - 60, scale: { from: 1.5, to: 1 }, duration: 1000, ease: "Cubic.easeOut" });
+    this.scene.tweens.add({ targets: t, alpha: 0, delay: 550, duration: 450, onComplete: () => t.destroy() });
   }
 
   /** Big set-piece explosion. power ~1..3 */
   explosion(x: number, y: number, power = 1) {
+    const ball = this.scene.add.image(x, y, "glow").setTint(0xffb040).setBlendMode(Phaser.BlendModes.ADD).setDepth(44).setScale(0.5);
+    this.scene.tweens.add({ targets: ball, scale: 3 + 2.5 * power, alpha: 0, duration: 420 + 120 * power, ease: "Expo.easeOut", onComplete: () => ball.destroy() });
     this.glow.explode(Math.round(6 * power), x, y);
     this.sparks.explode(Math.round(40 * power), x, y);
     this.streaks.explode(Math.round(24 * power), x, y);
