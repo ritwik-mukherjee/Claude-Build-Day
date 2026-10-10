@@ -3,6 +3,7 @@ import type Phaser from "phaser";
 import { bus } from "./game/bus";
 import { CHARACTERS, charById, paintPortrait, type CharacterDef, type CharacterId } from "./game/characters";
 import { Q } from "./game/quality";
+import { ROULETTE } from "../shared/fallback";
 import type { Mode } from "./game/ArenaScene";
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector(s) as T;
@@ -15,10 +16,10 @@ export const ARENA_PROMPTS: [string, string][] = [
 ];
 
 export const LAB_PROMPTS: [string, string][] = [
-  ["🚀 six rocket boosters", "Give me six rocket boosters"],
-  ["🥊 boxing glove on a spring", "Attach a giant boxing glove to a spring"],
-  ["🔥 rocket-powered chain hammer", "Give my character a rocket-powered chain hammer"],
-  ["🤯 most ridiculous weapon", "Build the most ridiculous weapon possible"],
+  ["🚀 six boosters", "Give me six rocket boosters"],
+  ["🥊 spring glove", "Attach a giant boxing glove to a spring"],
+  ["🔥 rocket hammer", "Give my character a rocket-powered chain hammer"],
+  ["🤯 most ridiculous", "Build the most ridiculous weapon possible"],
   ["🎁 surprise me", "Surprise me"],
 ];
 
@@ -26,13 +27,58 @@ export const state = {
   mode: "menu" as Mode,
   char: "goblin" as CharacterId,
   challenge: "standard",
+  carryPending: false,
 };
 
 let selected = 0;
 
+let spinning = false;
+/** Mutation roulette: picks a curated, fully supported prompt, reveals it, then submits it normally. */
+function roulette() {
+  if (spinning || ($("#prompt-form button") as HTMLButtonElement).disabled) return;
+  spinning = true;
+  const box = $("#roulette");
+  const txt = $("#ro-text");
+  const verdict = $("#ro-verdict");
+  const pick = ROULETTE[Math.floor(Math.random() * ROULETTE.length)];
+  box.classList.add("on");
+  verdict.textContent = "";
+  let i = 0,
+    delay = 45;
+  const tick = () => {
+    txt.textContent = ROULETTE[i++ % ROULETTE.length];
+    txt.classList.remove("flick");
+    void txt.offsetWidth;
+    txt.classList.add("flick");
+    delay *= 1.13;
+    if (delay < 260) setTimeout(tick, delay);
+    else {
+      txt.textContent = pick;
+      box.classList.add("landed");
+      verdict.textContent = "THE WHEEL DEMANDS IT";
+      setTimeout(() => {
+        box.classList.remove("on", "landed");
+        spinning = false;
+        bus.emit("submit-prompt", pick);
+      }, 1500);
+    }
+  };
+  tick();
+}
+
 function renderChips(list: [string, string][]) {
   const chips = $("#chips");
   chips.innerHTML = "";
+  const r = document.createElement("button");
+  r.className = "roulette-btn";
+  r.textContent = "🎰 ROULETTE";
+  r.title = "Spin for an absurd (but supported) mutation";
+  r.addEventListener("click", (e) => {
+    e.stopPropagation();
+    r.blur();
+    roulette();
+  });
+  chips.appendChild(r);
   for (const [label, prompt] of list) {
     const b = document.createElement("button");
     b.textContent = label;
@@ -88,7 +134,14 @@ export function initMenu(game: Phaser.Game) {
   $("#go-fight").addEventListener("click", () => start("arena", CHARACTERS[selected].id));
   $("#go-lab").addEventListener("click", () => start("lab", CHARACTERS[selected].id));
   $("#btn-menu").addEventListener("click", () => start("menu"));
-  $("#btn-mode").addEventListener("click", () => start(state.mode === "lab" ? "arena" : "lab"));
+  const switchMode = () => bus.emit("start", { mode: state.mode === "lab" ? "arena" : "lab", char: state.char, challenge: state.challenge, carry: true });
+  $("#btn-mode").addEventListener("click", switchMode);
+  $("#lp-arena").addEventListener("click", switchMode);
+  bus.on("loadout-detail", (list: string[]) => {
+    $("#lp-loadout").innerHTML = list.length
+      ? list.map((l) => `<div>▸ ${l.replace(/_/g, " ").replace("(", " <small>(").replace(/\)$/, ")</small>")}</div>`).join("")
+      : "<i>nothing bolted on yet — try a prompt or the roulette</i>";
+  });
   $("#special").addEventListener("click", () => bus.emit("special"));
   const fxBtn = $("#btn-fx");
   const renderFx = () => (fxBtn.textContent = Q.low ? "FX: LOW" : "FX: HIGH");
@@ -138,7 +191,11 @@ export function initMenu(game: Phaser.Game) {
     $(".hp.left .hp-name").innerHTML = `${d.name.replace(" ", " <span>")}</span>`;
     $(".hp.left").style.setProperty("--accent", d.accent);
     $("#special .sp-name").textContent = d.special.name;
-    $("#btn-mode").textContent = mode === "lab" ? "▶ ARENA" : "⚗ LAB";
+    $("#btn-mode").textContent = mode === "lab" ? "▶ ARENA (keep build)" : "⚗ LAB (keep build)";
+    $("#lp-name").textContent = `${d.name} — ${d.title}`;
+    $("#lp-sp").textContent = d.special.name;
+    $("#lp-sp-desc").textContent = d.special.desc;
+    if (!state.carryPending) $("#lp-loadout").innerHTML = "<i>nothing bolted on yet — try a prompt or the roulette</i>";
     $(".hp.right .hp-sub").textContent = mode === "lab" ? "TRAINING DUMMY // CANNOT DIE" : "HOSTILE // FOUNDRY GUARDIAN";
     renderChips(mode === "lab" ? LAB_PROMPTS : ARENA_PROMPTS);
     void def;

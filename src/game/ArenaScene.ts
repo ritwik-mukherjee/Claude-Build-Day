@@ -17,6 +17,8 @@ export interface RoundCfg {
   mode: Mode;
   char: CharacterId;
   challenge?: string;
+  carry?: boolean; // keep the current build when switching lab <-> arena
+  ops?: Operation[];
 }
 
 type Body = MatterJS.BodyType;
@@ -27,6 +29,7 @@ const LABEL: Record<ComponentType, string> = {
   shield: "ENERGY SHIELD",
   spring_legs: "SPRING LEGS",
   armor_plating: "ARMOR PLATING",
+  boxing_glove: "SPRING BOXING GLOVE",
 };
 
 export class ArenaScene extends Phaser.Scene {
@@ -61,8 +64,10 @@ export class ArenaScene extends Phaser.Scene {
     super("arena");
   }
 
+  applied: Operation[] = []; // successfully dispatched ops this round (for carrying builds)
+
   init(data: Partial<RoundCfg>) {
-    if (data && data.mode) this.cfg = { mode: data.mode, char: data.char ?? "goblin", challenge: data.challenge };
+    if (data && data.mode) this.cfg = { mode: data.mode, char: data.char ?? "goblin", challenge: data.challenge, ops: data.ops };
   }
 
   create() {
@@ -70,7 +75,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this, {
       lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
       nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
-      acc: 0, bombs: [], poundT: -1, domeHitCd: 0,
+      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [],
     });
     this.gen++;
     if (!this.textures.exists("px")) buildTextures(this);
@@ -109,7 +114,8 @@ export class ArenaScene extends Phaser.Scene {
     const onSubmit = (text: string) => this.submitPrompt(text);
     const onFocus = (f: boolean) => (this.input.keyboard!.enabled = !f);
     const onRestart = () => this.scene.restart({ ...this.cfg });
-    const onStart = (cfg: RoundCfg) => this.scene.restart(cfg);
+    const onStart = (cfg: RoundCfg) =>
+      this.scene.restart({ ...cfg, ops: cfg.carry && cfg.char === this.cfg.char ? [...this.applied] : undefined });
     const onSpecial = () => this.useSpecial();
     const onQuality = () => this.applyQuality();
     bus.on("submit-prompt", onSubmit);
@@ -136,8 +142,24 @@ export class ArenaScene extends Phaser.Scene {
     bus.emit(EV.HP, { player: 1, enemy: 1 });
     bus.emit(EV.LOADOUT, []);
     bus.emit("round", { ...this.cfg, def });
+    if (this.cfg.ops?.length && this.cfg.mode !== "menu") {
+      // imported build: same handlers, no cinematic
+      for (const o of this.cfg.ops) {
+        void dispatch(o);
+        this.applied.push(o);
+      }
+      this.time.delayedCall(50, () => {
+        this.fx.floatText(this.goblin.x, this.goblin.y - 110, "BUILD IMPORTED", "#26f0ff", 22);
+        this.emitLoadout();
+      });
+    }
     if (this.cfg.mode === "arena") this.say(`${def.name} vs. ARACHNOTRON. ${def.quote} Type a mutation to begin.`, "system");
     else if (this.cfg.mode === "lab") this.say(`Character Lab: ${def.name}. The spider is a training dummy. Invent something stupid.`, "system");
+  }
+
+  emitLoadout() {
+    bus.emit(EV.LOADOUT, [...this.goblin.comps.keys()]);
+    bus.emit("loadout-detail", this.goblin.list());
   }
 
   applyQuality() {
@@ -378,7 +400,7 @@ export class ArenaScene extends Phaser.Scene {
       await this.playTransformation(plan);
       this.mutations++;
       bus.emit(EV.MUTATION_DONE, { plan, source });
-      bus.emit(EV.LOADOUT, [...this.goblin.comps.keys()]);
+      this.emitLoadout();
       this.log(`player mutated: ${plan.summary}`);
       this.nextDirector = Math.min(this.nextDirector, 3.5);
     } catch (e) {
@@ -410,7 +432,8 @@ export class ArenaScene extends Phaser.Scene {
     bus.emit(EV.BLUEPRINT, {
       title: plan.summary,
       lines: plan.operations.map(
-        (o) => `${o.op.toUpperCase()} ${LABEL[o.component]} @ ${o.socket.toUpperCase()} :: size ${o.size.toFixed(1)} | power ${o.power.toFixed(1)} | mass ${o.mass.toFixed(1)} | length ${o.length.toFixed(1)} | ${o.color}`,
+        (o) =>
+          `${o.op.toUpperCase()} ${o.component === "rocket_booster" && o.count > 1 ? `${o.count}× ` : ""}${LABEL[o.component]} @ ${o.socket.toUpperCase()} :: size ${o.size.toFixed(1)} | power ${o.power.toFixed(1)} | mass ${o.mass.toFixed(1)} | length ${o.length.toFixed(1)}${o.rocket > 0 ? ` | rocket ${o.rocket.toFixed(1)}` : ""} | ${o.color}`,
       ),
     });
     try {
@@ -439,12 +462,13 @@ export class ArenaScene extends Phaser.Scene {
     if (op.op === "remove") {
       this.fx.floatText(target.x, target.y - 40, `${label} EJECTED`, "#ff3344", 16);
       await dispatch(op);
+      this.applied = this.applied.filter((a) => a.component !== op.component);
       this.fx.burst(target.x, target.y, 30);
       this.fx.shake(150, 0.004);
       await this.wait(500);
       return;
     }
-    const key = { rocket_booster: "c_booster", chain_weapon: "c_hammer", shield: "c_shield", spring_legs: "c_spring", armor_plating: "c_armor" }[op.component];
+    const key = { rocket_booster: "c_booster", chain_weapon: "c_hammer", shield: "c_shield", spring_legs: "c_spring", armor_plating: "c_armor", boxing_glove: "c_glove" }[op.component];
     // ghost part flies in from off-screen, spinning, then snaps on
     const side = g.facing > 0 ? -1 : 1;
     const ghost = this.add
@@ -477,6 +501,7 @@ export class ArenaScene extends Phaser.Scene {
       this.fx.floatText(target.x, target.y - 40, "FABRICATION FAULT", "#ff3344", 16);
       return;
     }
+    this.applied.push(op);
     const p = g.socketPos(op.socket);
     this.fx.burst(p.x, p.y, 40, true);
     this.fx.burst(p.x, p.y, 25);
@@ -490,13 +515,20 @@ export class ArenaScene extends Phaser.Scene {
     if (op.component === "rocket_booster") {
       const n = g.socketPos(op.socket);
       this.fx.explosion(n.x, n.y + 30, 1.2);
-      this.fx.floatText(n.x, n.y - 50, "IGNITION", "#ff7a1a", 30);
+      this.fx.floatText(n.x, n.y - 50, op.count > 2 ? `${op.count}× IGNITION` : "IGNITION", "#ff7a1a", 30);
       g.autoThrust = 0.25;
     } else if (op.component === "chain_weapon") {
       const h = g.comps.get("chain_weapon")?.head;
       if (h) {
         this.fx.burst(h.x, h.y, 50);
-        this.fx.floatText(h.x, h.y - 40, `${(op.mass * 450).toFixed(0)} KG OF BAD IDEA`, "#ffc83d", 18);
+        this.fx.floatText(h.x, h.y - 40, op.rocket > 0 ? "ROCKET-POWERED. WHY." : `${(op.mass * 450).toFixed(0)} KG OF BAD IDEA`, "#ffc83d", 18);
+      }
+    } else if (op.component === "boxing_glove") {
+      const gl = g.comps.get("boxing_glove")?.head;
+      if (gl) {
+        this.fx.burst(gl.x, gl.y, 30);
+        this.fx.floatText(gl.x, gl.y - 40, op.rocket > 0 ? "ROCKET HAYMAKER ARMED" : "SPRING LOADED", "#ff3344", 20);
+        g.punch(gl.x + g.facing * 200, gl.y - 20); // show it off
       }
     } else if (op.component === "shield") {
       this.fx.shockwave(p.x, p.y, 0x26f0ff, 3, 600);
@@ -556,9 +588,28 @@ export class ArenaScene extends Phaser.Scene {
   private onCollide(ev: Phaser.Physics.Matter.Events.CollisionStartEvent) {
     const chain = this.goblin.comps.get("chain_weapon");
     const head = chain?.head?.body as Body | undefined;
+    const gloveC = this.goblin.comps.get("boxing_glove");
+    const glove = gloveC?.head?.body as Body | undefined;
     for (const pair of ev.pairs) {
       const a = pair.bodyA.parent ?? pair.bodyA,
         b = pair.bodyB.parent ?? pair.bodyB;
+      // spring boxing glove
+      if (glove && (a === glove || b === glove)) {
+        const other = a === glove ? b : a;
+        const sp = this.goblin.weaponSpeed("boxing_glove");
+        if (other === this.spider.b && sp > 6) {
+          const p = gloveC!.params;
+          const dmg = Math.min(30, sp * 0.45 * (0.7 + 0.3 * p.power) * Math.sqrt(p.size) + 4 * p.rocket);
+          const d = this.spider.damage(dmg, this.goblin.x, Math.min(22, sp * 0.8));
+          this.fx.floatText(this.spider.x, this.spider.y - 70, `-${Math.round(d)}`, "#ff3344", 32);
+          this.fx.floatText(glove.position.x, glove.position.y - 30, sp > 22 ? "K.O. PUNCH!" : "BOING!", "#ffc83d", sp > 22 ? 26 : 20);
+          this.impact(glove.position.x, glove.position.y, Math.min(2.4, 0.6 + sp / 20), false);
+          this.log(`boxing glove hit spider for ${Math.round(d)}`);
+        } else if (other.label === "crate" && sp > 6) {
+          this.fx.burst(glove.position.x, glove.position.y, 16);
+          this.matter.body.setVelocity(other, { x: glove.velocity.x, y: glove.velocity.y - 6 });
+        }
+      }
       // hammer impacts
       if (head && (a === head || b === head)) {
         const other = a === head ? b : a;

@@ -126,6 +126,15 @@ export function buildTextures(scene: Phaser.Scene) {
     g.fillStyle(0x111111);
     for (let y = 2; y < 40; y += 8) g.fillTriangle(0, y, 8, y + 4, 0, y + 6).fillTriangle(52, y, 60, y + 4, 52, y + 6);
   });
+  tex(scene, "c_glove", 40, 36, (g) => {
+    // boxing glove pointing right (+x)
+    g.fillStyle(0x5a0a10).fillRoundedRect(2, 4, 34, 28, 13);
+    g.fillStyle(0xff3344).fillRoundedRect(4, 5, 31, 25, 12);
+    g.fillStyle(0xff7080).fillEllipse(24, 11, 16, 6);
+    g.fillStyle(0xe02030).fillRoundedRect(12, 22, 16, 8, 4); // thumb
+    g.fillStyle(0xf0f0f0).fillRect(0, 9, 7, 18); // cuff
+    g.lineStyle(1, 0x5a0a10).lineBetween(2, 12, 6, 12).lineBetween(2, 18, 6, 18).lineBetween(2, 24, 6, 24);
+  });
   tex(scene, "c_spring", 18, 22, (g) => {
     g.lineStyle(3, 0xd0d6dc, 1);
     for (let y = 2; y < 20; y += 5) g.strokeLineShape(new Phaser.Geom.Line(1, y, 17, y + 4));

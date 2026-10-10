@@ -69,10 +69,13 @@ Semantics:
 - shield: blocks lasers and debris. power = durability, size = coverage.
 - spring_legs: jump boost. power = jump strength.
 - armor_plating: reduces damage taken. power = damage reduction.
+- boxing_glove: spring-loaded punching glove on the hand. size = glove size, power = punch strength, length = spring reach, mass = heft.
+Extra fields: count = number of rocket boosters (1-6; use 1 for other components). rocket = rocket assist (0-3) bolted onto a chain_weapon or boxing_glove ("rocket-powered hammer" = chain_weapon with rocket 2-3, NOT a rocket_booster).
 Bounds: size ${BOUNDS.size.join("-")}, power ${BOUNDS.power.join("-")}, mass ${BOUNDS.mass.join("-")}, length ${BOUNDS.length.join("-")}.
-op "attach" adds/replaces a component with absolute values. op "modify" multiplies an EXISTING component's values (1 = unchanged), e.g. "heavier weapon" -> modify chain_weapon mass 2, others 1.
+op "attach" adds/replaces a component with absolute values. op "modify" multiplies an EXISTING component's size/power/mass/length (1 = unchanged; count 1 and rocket 0 mean unchanged), e.g. "heavier weapon" -> modify chain_weapon mass 2, others 1.
 op "remove" detaches a component (numbers ignored, use 1).
 Map vague weapons (hammer, mace, wrecking ball, flail, sword) to chain_weapon. Map flying/jets to rocket_booster.
+"Surprise me" = invent a surprising but coherent combo. "Most ridiculous" = push values toward their maxima across up to 3 components.
 If the request is impossible or off-topic, pick the closest fun component anyway. Max 3 operations.
 Summary: one punchy sentence describing the result, in-world.`;
 
@@ -105,6 +108,7 @@ async function callStructured(model: string, system: string, user: string, schem
   return JSON.parse(textOf(msg));
 }
 
+let surpriseSeed = 0;
 const app = express();
 app.use(express.json({ limit: "32kb" }));
 
@@ -121,7 +125,7 @@ app.post("/api/mutate", async (req, res) => {
 
   let out: MutateResponse;
   if (!client) {
-    out = { plan: fallbackCompile(prompt, owned), source: "fallback", note: "no API key configured" };
+    out = { plan: fallbackCompile(prompt, owned, surpriseSeed++), source: "fallback", note: "no API key configured" };
   } else {
     try {
       const raw = await callStructured(
@@ -136,7 +140,7 @@ app.post("/api/mutate", async (req, res) => {
     } catch (err) {
       noteFailure(err);
       console.warn("[mutate] model failed, using fallback:", (err as Error).message);
-      out = { plan: fallbackCompile(prompt, owned), source: "fallback", note: friendly(err) };
+      out = { plan: fallbackCompile(prompt, owned, surpriseSeed++), source: "fallback", note: friendly(err) };
     }
   }
   out.link = link.state;

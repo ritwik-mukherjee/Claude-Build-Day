@@ -2,6 +2,7 @@ import { fallbackCompile, fallbackDirect } from "../shared/fallback";
 import type { CombatSummary, ComponentType, DirectorResponse, LinkState, MutateResponse } from "../shared/mutations";
 import { bus } from "./game/bus";
 
+let localSeed = 0;
 const reportLink = (state: LinkState | undefined) => state && bus.emit("link", { state });
 
 async function post<T>(url: string, body: unknown, timeoutMs: number): Promise<T> {
@@ -24,7 +25,7 @@ export async function requestMutation(prompt: string, owned: ComponentType[]): P
     return r;
   } catch (e) {
     reportLink("offline");
-    return { plan: fallbackCompile(prompt, owned), source: "fallback", note: `server unreachable (${(e as Error).message})` };
+    return { plan: fallbackCompile(prompt, owned, localSeed++), source: "fallback", note: `server unreachable (${(e as Error).message})` };
   }
 }
 

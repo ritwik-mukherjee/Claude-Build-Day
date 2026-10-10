@@ -3,6 +3,7 @@ import { COLOR_HEX, type ComponentType, type Operation } from "../../shared/muta
 import type { Arena } from "./Arena";
 import type { Fx } from "./Fx";
 import { MB, flashWhite, unflash } from "./util";
+import { Q } from "./quality";
 import { CHARACTERS, type CharacterDef } from "./characters";
 
 type Body = MatterJS.BodyType;
@@ -18,6 +19,8 @@ export interface Params {
   length: number;
   color: number;
   socket: Operation["socket"];
+  count: number;
+  rocket: number;
 }
 
 interface Comp {
@@ -27,9 +30,12 @@ interface Comp {
   imgs: Img[];
   constraints: MatterJS.ConstraintType[];
   emitters: Phaser.GameObjects.Particles.ParticleEmitter[];
-  head?: Img; // chain weapon head
+  head?: Img; // chain weapon head / boxing glove
   shieldHp?: number;
   shieldDown?: number;
+  spring?: MatterJS.ConstraintType; // boxing glove spring
+  gfx?: Phaser.GameObjects.Graphics;
+  extendT?: number;
 }
 
 export interface GoblinInput {
@@ -264,7 +270,7 @@ export class Goblin {
       if (want) {
         this.thrusting = true;
         this.fuel = Math.max(0, this.fuel - dt * (0.32 / Math.sqrt(rockets.params.power)));
-        const p = rockets.params.power;
+        const p = Math.min(3, rockets.params.power * (1 + 0.12 * (rockets.params.count - 2)));
         const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
         MB.setVelocity(t, {
           x: t.velocity.x + dir * 0.25 * p,
@@ -283,6 +289,17 @@ export class Goblin {
         MB.setVelocity(chain.head.body as Body, { x: this.facing * 9, y: 34 });
       }
       if (this.slamT > 0.9) this.slamT = -1;
+    }
+    const glove = this.comps.get("boxing_glove");
+    if (glove?.spring && glove.extendT !== undefined && glove.extendT > 0) {
+      glove.extendT -= dt;
+      if (glove.extendT <= 0) glove.spring.length = 16 * glove.params.size;
+    }
+    if (chain?.head && chain.params.rocket > 0) {
+      // rocket assist: push the head along its direction of travel (capped for solver stability)
+      const hb = chain.head.body as Body;
+      const sp = Math.hypot(hb.velocity.x, hb.velocity.y);
+      if (sp > 2 && sp < 30) MB.applyForce(hb, hb.position, { x: (hb.velocity.x / sp) * 0.0006 * chain.params.rocket * hb.mass, y: (hb.velocity.y / sp) * 0.0006 * chain.params.rocket * hb.mass });
     }
     if (chain?.head) {
       const hb = chain.head.body as Body;
@@ -320,8 +337,42 @@ export class Goblin {
   }
 
   punch(aimX: number, aimY: number) {
+    const glove = this.comps.get("boxing_glove");
+    if (glove?.head && glove.spring) {
+      // spring-loaded haymaker: extend the spring, launch the glove at the cursor, snap back later
+      const p = glove.params;
+      const hand = this.socketPos(p.socket);
+      const ang = Math.atan2(aimY - hand.y, aimX - hand.x);
+      const sp = 20 + 6 * p.power + 6 * p.rocket;
+      glove.spring.length = (60 + 70 * p.length) * (0.8 + 0.2 * p.size);
+      glove.extendT = 0.22;
+      MB.setVelocity(glove.head.body as Body, { x: Math.cos(ang) * sp, y: Math.sin(ang) * sp });
+      return;
+    }
     const ang = Math.atan2(aimY - this.farmR.y, aimX - this.farmR.x);
     MB.setVelocity(this.farmR.body as Body, { x: Math.cos(ang) * 22, y: Math.sin(ang) * 22 });
+  }
+
+  /** speed of whichever weapon head (hammer / glove) is attached */
+  weaponSpeed(type: "chain_weapon" | "boxing_glove") {
+    const h = this.comps.get(type)?.head;
+    if (!h) return 0;
+    const v = (h.body as Body).velocity;
+    return Math.hypot(v.x, v.y);
+  }
+
+  private flameEmitter(params: Params) {
+    return this.scene.add
+      .particles(0, 0, "glow", {
+        speed: { min: 40, max: 120 },
+        lifespan: { min: 120, max: 260 + 60 * params.rocket },
+        scale: { start: 0.45 + 0.15 * params.rocket, end: 0 },
+        alpha: { start: 1, end: 0 },
+        tint: [0xffffff, 0xffc83d, 0xff7a1a, 0xff3344],
+        blendMode: "ADD",
+        emitting: false,
+      })
+      .setDepth(21);
   }
 
   /** returns damage actually taken */
@@ -365,12 +416,15 @@ export class Goblin {
   // Components
   // ---------------------------------------------------------------------
   list(): string[] {
-    return [...this.comps.values()].map((c) => `${c.type}(size ${c.params.size.toFixed(1)}, power ${c.params.power.toFixed(1)}, mass ${c.params.mass.toFixed(1)}, length ${c.params.length.toFixed(1)})`);
+    return [...this.comps.values()].map(
+      (c) =>
+        `${c.type}${c.type === "rocket_booster" ? ` x${c.params.count}` : ""}(size ${c.params.size.toFixed(1)}, power ${c.params.power.toFixed(1)}, mass ${c.params.mass.toFixed(1)}, length ${c.params.length.toFixed(1)}${c.params.rocket > 0 ? `, rocket ${c.params.rocket.toFixed(1)}` : ""})`,
+    );
   }
 
   attach(op: Operation) {
     this.remove(op.component, true);
-    const params: Params = { size: op.size, power: op.power, mass: op.mass, length: op.length, color: COLOR_HEX[op.color], socket: op.socket };
+    const params: Params = { size: op.size, power: op.power, mass: op.mass, length: op.length, color: COLOR_HEX[op.color], socket: op.socket, count: op.count, rocket: op.rocket };
     this.build(op.component, params);
   }
 
@@ -382,6 +436,8 @@ export class Goblin {
     p.power = Phaser.Math.Clamp(p.power * op.power, 0.5, 3);
     p.mass = Phaser.Math.Clamp(p.mass * op.mass, 0.5, 5);
     p.length = Phaser.Math.Clamp(p.length * op.length, 0.5, 3);
+    if (op.count !== 1) p.count = op.count; // modify: explicit new count, 1 = unchanged
+    if (op.rocket > 0) p.rocket = op.rocket; // modify: explicit rocket assist, 0 = unchanged
     this.remove(op.component, true);
     this.build(op.component, p);
   }
@@ -397,6 +453,7 @@ export class Goblin {
     for (const i of c.imgs) i.destroy();
     for (const s of c.sprites) s.destroy();
     for (const e of c.emitters) e.destroy();
+    c.gfx?.destroy();
     this.comps.delete(type);
   }
 
@@ -405,11 +462,15 @@ export class Goblin {
     const sc = this.scene;
     switch (type) {
       case "rocket_booster": {
-        const n = params.socket === "feet" ? 2 : 2;
+        const n = params.count;
+        const k = n > 2 ? 0.85 : 1; // shrink a little when there are many
         for (let i = 0; i < n; i++) {
-          const s = sc.add.image(0, 0, "c_booster").setScale(0.7 + 0.35 * params.size).setDepth(params.socket === "feet" ? 22 : 17);
+          const s = sc.add.image(0, 0, "c_booster").setScale((0.7 + 0.35 * params.size) * k).setDepth(params.socket === "feet" ? 22 : 17);
           s.setTint(params.color === COLOR_HEX.orange ? 0xffffff : params.color);
           c.sprites.push(s);
+        }
+        {
+          // one shared flame emitter for all nozzles (cheap on integrated GPUs)
           const e = sc.add.particles(0, 0, "glow", {
             speed: { min: 180, max: 380 },
             angle: { min: 80, max: 100 },
@@ -425,12 +486,38 @@ export class Goblin {
         }
         break;
       }
+      case "boxing_glove": {
+        const hand = this.socketPos(params.socket);
+        const forearm = params.socket === "left_hand" ? this.farmL : this.farmR;
+        const r = 13 * params.size;
+        const glove = sc.matter.add.image(hand.x + this.facing * 20, hand.y, "c_glove", undefined, {
+          shape: { type: "circle", radius: r },
+          density: 0.0025 * Math.sqrt(params.mass),
+          frictionAir: 0.04,
+          restitution: 0.5,
+          label: "glove",
+          collisionFilter: { group: PLAYER_GROUP, category: CAT_PLAYER },
+        });
+        glove.setDisplaySize(r * 2.6, r * 2.4).setDepth(23).setTint(params.color === COLOR_HEX.red ? 0xffffff : params.color);
+        c.imgs.push(glove);
+        c.head = glove;
+        c.spring = sc.matter.add.constraint(forearm.body as Body, glove.body as Body, 16 * params.size, 0.12, {
+          pointA: { x: 0, y: this.def.dims.farm[1] / 2 },
+          pointB: { x: 0, y: 0 },
+          damping: 0.05,
+        });
+        c.constraints.push(c.spring);
+        c.gfx = sc.add.graphics().setDepth(22);
+        c.extendT = 0;
+        if (params.rocket > 0) c.emitters.push(this.flameEmitter(params));
+        break;
+      }
       case "chain_weapon": {
         const hand = this.socketPos(params.socket);
         const links = Math.round(4 + 4 * params.length);
         const forearm = params.socket === "left_hand" ? this.farmL : this.farmR;
         let prev: Body = forearm.body as Body;
-        let prevPt = { x: 0, y: 14 };
+        let prevPt = { x: 0, y: this.def.dims.farm[1] / 2 };
         for (let i = 0; i < links; i++) {
           const l = sc.matter.add.image(hand.x, hand.y + 10 + i * 10, "c_link", undefined, {
             shape: { type: "circle", radius: 4 },
@@ -459,6 +546,7 @@ export class Goblin {
         c.imgs.push(head);
         c.head = head;
         c.constraints.push(sc.matter.add.constraint(prev, head.body as Body, 0, 0.9, { pointA: prevPt, pointB: { x: 0, y: -h / 2 } }));
+        if (params.rocket > 0) c.emitters.push(this.flameEmitter(params));
         break;
       }
       case "shield": {
@@ -485,22 +573,63 @@ export class Goblin {
     for (const c of this.comps.values()) {
       switch (c.type) {
         case "rocket_booster": {
+          const e = c.emitters[0];
+          const tw = this.def.dims.torso[0],
+            th = this.def.dims.torso[1];
+          const per = Q.low ? 1 : c.sprites.length > 3 ? 2 : 3;
           c.sprites.forEach((s, i) => {
             let p: Phaser.Math.Vector2, rot: number;
             if (c.params.socket === "feet") {
-              const shin = i === 0 ? this.shinL : this.shinR;
-              p = this.w(shin, 0, 8);
+              const shin = i % 2 === 0 ? this.shinL : this.shinR;
+              p = this.w(shin, 0, 8 - Math.floor(i / 2) * 12);
               rot = shin.rotation;
             } else {
-              p = this.w(this.torso, -this.facing * (16 + i * 9), -2 - i * 4);
-              rot = this.torso.rotation;
+              // back rack: columns of up to 3, fanned slightly
+              const col = Math.floor(i / 3),
+                row = i % 3;
+              const rows = Math.min(3, c.sprites.length - col * 3);
+              p = this.w(this.torso, -this.facing * (tw / 2 + 2 + col * 11), -th / 4 + (row - (rows - 1) / 2) * 15);
+              rot = this.torso.rotation + (row - (rows - 1) / 2) * 0.15 * -this.facing;
             }
             s.setPosition(p.x, p.y).setRotation(rot);
             const nozzle = new Phaser.Math.Vector2(p.x - Math.sin(rot) * 24 * s.scaleY, p.y + Math.cos(rot) * 24 * s.scaleY);
-            const e = c.emitters[i];
-            if (this.thrusting) e.emitParticleAt(nozzle.x, nozzle.y, 3);
-            else if (Math.random() < 0.3) e.emitParticleAt(nozzle.x, nozzle.y, 1);
+            if (this.thrusting) e.emitParticleAt(nozzle.x, nozzle.y, per);
+            else if (Math.random() < 0.15) e.emitParticleAt(nozzle.x, nozzle.y, 1);
           });
+          break;
+        }
+        case "boxing_glove": {
+          const g = c.gfx!,
+            gl = c.head!;
+          const hand = this.socketPos(c.params.socket);
+          g.clear();
+          // zig-zag spring between hand and glove
+          const dx = gl.x - hand.x,
+            dy = gl.y - hand.y;
+          const L = Math.hypot(dx, dy) || 1;
+          const nx = -dy / L,
+            ny = dx / L;
+          const coils = 9;
+          g.lineStyle(3, 0xd0d6dc, 1).beginPath().moveTo(hand.x, hand.y);
+          for (let i = 1; i < coils; i++) {
+            const t = i / coils,
+              side = i % 2 ? 6 : -6;
+            g.lineTo(hand.x + dx * t + nx * side * c.params.size, hand.y + dy * t + ny * side * c.params.size);
+          }
+          g.lineTo(gl.x, gl.y).strokePath();
+          gl.setRotation(Math.atan2(dy, dx));
+          gl.setFlipY(dx < 0);
+          if (c.emitters[0] && (Math.hypot((gl.body as Body).velocity.x, (gl.body as Body).velocity.y) > 6 || Math.random() < 0.2))
+            c.emitters[0].emitParticleAt(gl.x - (dx / L) * 18, gl.y - (dy / L) * 18, Q.low ? 1 : 2);
+          break;
+        }
+        case "chain_weapon": {
+          const h = c.head;
+          if (h && c.emitters[0]) {
+            const v = (h.body as Body).velocity;
+            const sp = Math.hypot(v.x, v.y) || 1;
+            c.emitters[0].emitParticleAt(h.x - (v.x / sp) * 24, h.y - (v.y / sp) * 24, sp > 5 ? (Q.low ? 1 : 3) : 1);
+          }
           break;
         }
         case "shield": {

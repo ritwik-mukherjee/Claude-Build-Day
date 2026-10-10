@@ -206,3 +206,32 @@ body:not(.mode-menu) #select { display: none; }
 body.lowfx #hud::before, body.lowfx #hud::after { display: none; }
 body.lowfx .hp.left .fill, body.lowfx .hp.right .fill, body.lowfx #prompt-form, body.lowfx #blueprint, body.lowfx #director { box-shadow: none !important; }
 body.lowfx .card.on canvas, body.lowfx .caret, body.lowfx #special.ready { animation: none; }
+
+/* ---------- lab panel ---------- */
+#labpanel { position: absolute; left: 24px; top: 170px; width: min(330px, 26vw); z-index: 3; background: rgba(4, 22, 28, 0.86); border: 1px solid var(--cyan-dim); border-top: 3px solid var(--cyan); padding: 10px 14px; font-size: 12px; display: none; }
+body.mode-lab #labpanel { display: block; }
+#hud.cine #labpanel { opacity: 0; }
+.lp-head { font-family: var(--disp); font-size: 10px; letter-spacing: 0.25em; color: var(--cyan); }
+.lp-name { font-family: var(--disp); font-weight: 700; font-size: 13px; color: #fff; margin: 6px 0; letter-spacing: 0.06em; }
+.lp-sp b { color: var(--orange); font-family: var(--disp); font-size: 12px; letter-spacing: 0.1em; }
+.lp-sp span { color: rgba(220,240,255,0.5); }
+#lp-sp-desc { color: rgba(220,240,255,0.75); margin-top: 2px; }
+.lp-sub { font-family: var(--disp); font-size: 9px; letter-spacing: 0.25em; color: var(--gold); margin: 10px 0 4px; }
+#lp-loadout div { color: #fff; margin: 2px 0; }
+#lp-loadout small { color: rgba(200,240,255,0.55); }
+#lp-loadout i { color: rgba(220,240,255,0.45); }
+.lp-ctl { color: rgba(220,240,255,0.6); line-height: 1.5; }
+#lp-arena { margin-top: 10px; width: 100%; font-family: var(--disp); font-size: 11px; letter-spacing: 0.15em; padding: 8px; background: linear-gradient(180deg, #ff9a3c, #ff5a10); color: #1a0800; border: 0; cursor: pointer; font-weight: 700; }
+
+/* ---------- roulette ---------- */
+.chips .roulette-btn { color: #1a0800; background: linear-gradient(180deg, #ffd36a, #ff9a3c); border-color: #ffc83d; font-weight: 700; }
+#roulette { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(0.9); width: min(640px, 80vw); z-index: 6; text-align: center; background: rgba(10, 6, 2, 0.92); border: 2px solid var(--gold); padding: 16px 20px 18px; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; box-shadow: 0 0 40px rgba(255,200,61,0.35); clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px); }
+#roulette.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.ro-title { font-family: var(--disp); font-weight: 900; font-size: 14px; letter-spacing: 0.3em; color: var(--gold); }
+.ro-reel { margin: 12px 0 8px; height: 52px; display: flex; align-items: center; justify-content: center; border-top: 1px solid rgba(255,200,61,0.3); border-bottom: 1px solid rgba(255,200,61,0.3); background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(40,20,0,0.3), rgba(0,0,0,0.6)); overflow: hidden; }
+#ro-text { font-size: 19px; color: #fff; }
+#ro-text.flick { animation: flick 0.12s ease-out; }
+@keyframes flick { from { transform: translateY(-60%); opacity: 0.2; } to { transform: none; opacity: 1; } }
+#roulette.landed #ro-text { color: var(--gold); font-weight: 700; text-shadow: 0 0 12px rgba(255,200,61,0.7); animation: pop 0.4s cubic-bezier(.2,1.6,.4,1); }
+@keyframes pop { from { transform: scale(1.4); } to { transform: none; } }
+.ro-verdict { font-family: var(--disp); font-size: 12px; letter-spacing: 0.35em; color: var(--red); min-height: 16px; }
