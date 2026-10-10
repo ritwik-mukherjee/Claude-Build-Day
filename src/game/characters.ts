@@ -53,8 +53,9 @@ export interface CharacterDef {
   backTint: number;
   special: AbilityDef; // slot 1 (F / E / 1)
   extra?: AbilityDef[]; // slots 2, 3 (keys 2 / 3)
-  /** imported character whose real 3D/2D model is not in the repo yet: uses a neutral prototype rig */
+  /** imported character: real glTF model in the 3D showcase / chamber; the 2D arena uses an articulated rig */
   modelPending?: boolean;
+  model?: "hulk" | "kratos" | "doraemon";
   stats: { speed: number; power: number; armor: number; chaos: number }; // 1..5 for the select screen
 }
 
@@ -144,11 +145,34 @@ export const CHARACTERS: CharacterDef[] = [
 // ---------------------------------------------------------------------------
 export const IMPORTED: CharacterDef[] = [
   {
+    id: "hulk",
+    model: "hulk",
+    name: "HULK",
+    title: "Gamma-Powered Wrecker",
+    bio: "Very large. Very green. Very unconvinced by the concept of indoor voices.",
+    quote: "“Real 3D model in the showcase + Mutation Chamber; articulated 2D rig in the arena.”",
+    tex: "xh",
+    accent: "#5dbb3a",
+    dims: { torso: [52, 60], head: 20, headOffset: 0, uarm: [18, 34], farm: [19, 34], thigh: [20, 32], shin: [22, 36] },
+    density: 0.006,
+    hp: 180,
+    armor: 0.8,
+    speed: 6,
+    jump: 13.5,
+    airJumps: 0,
+    backTint: 0xa8b0a0,
+    special: { id: "hulk_smash", name: "HULK SMASH", short: "SMASH", desc: "Leap toward the cursor and slam down: huge shockwave, launches the spider.", cooldown: 5 },
+    extra: [{ id: "thunderclap", name: "THUNDERCLAP", short: "CLAP", desc: "Clap shockwave in a forward cone: knockback, brief stun, shatters lasers.", cooldown: 6 }],
+    modelPending: true,
+    stats: { speed: 3, power: 5, armor: 5, chaos: 4 },
+  },
+  {
     id: "kratos",
+    model: "kratos",
     name: "KRATOS",
-    title: "Imported fighter · model pending",
+    title: "Axe-Throwing Spartan",
     bio: "Throws his axe, recalls it, and is extremely annoyed by spiders.",
-    quote: "“Prototype rig — real model pending import.”",
+    quote: "“Real 3D model in the showcase + Mutation Chamber; articulated 2D rig in the arena.”",
     tex: "xk",
     accent: "#e0402a",
     dims: { torso: [40, 56], head: 18, headOffset: 0, uarm: [15, 32], farm: [15, 32], thigh: [17, 32], shin: [18, 36] },
@@ -166,10 +190,11 @@ export const IMPORTED: CharacterDef[] = [
   },
   {
     id: "doraemon",
+    model: "doraemon",
     name: "DORAEMON",
-    title: "Imported fighter · model pending",
+    title: "Gadget Cat from the Future",
     bio: "Pulls gadgets out of a pocket. The pocket is bigger on the inside.",
-    quote: "“Prototype rig — real model pending import.”",
+    quote: "“Real 3D model in the showcase + Mutation Chamber; articulated 2D rig in the arena.”",
     tex: "xd",
     accent: "#2a9df4",
     dims: { torso: [40, 38], head: 24, headOffset: 0, uarm: [10, 18], farm: [11, 18], thigh: [13, 14], shin: [16, 16] },
@@ -187,27 +212,6 @@ export const IMPORTED: CharacterDef[] = [
     ],
     modelPending: true,
     stats: { speed: 3, power: 2, armor: 3, chaos: 5 },
-  },
-  {
-    id: "hulk",
-    name: "HULK",
-    title: "Imported fighter · model pending",
-    bio: "Very large. Very green. Very unconvinced by the concept of indoor voices.",
-    quote: "“Prototype rig — real model pending import.”",
-    tex: "xh",
-    accent: "#5dbb3a",
-    dims: { torso: [52, 60], head: 20, headOffset: 0, uarm: [18, 34], farm: [19, 34], thigh: [20, 32], shin: [22, 36] },
-    density: 0.006,
-    hp: 180,
-    armor: 0.8,
-    speed: 6,
-    jump: 13.5,
-    airJumps: 0,
-    backTint: 0xa8b0a0,
-    special: { id: "hulk_smash", name: "HULK SMASH", short: "SMASH", desc: "Leap toward the cursor and slam down: huge shockwave, launches the spider.", cooldown: 5 },
-    extra: [{ id: "thunderclap", name: "THUNDERCLAP", short: "CLAP", desc: "Clap shockwave in a forward cone: knockback, brief stun, shatters lasers.", cooldown: 6 }],
-    modelPending: true,
-    stats: { speed: 3, power: 5, armor: 5, chaos: 4 },
   },
 ];
 

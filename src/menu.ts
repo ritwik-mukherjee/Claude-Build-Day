@@ -4,9 +4,17 @@ import { bus } from "./game/bus";
 import { abilitiesOf, CHARACTERS, IMPORTED, charById, paintPortrait, type CharacterDef, type CharacterId } from "./game/characters";
 import { Q } from "./game/quality";
 import { ROULETTE } from "../shared/fallback";
+import { closeShowcase, featureShow, makeSnapshots, openShowcase, snapshots } from "./feature";
+import type { ModelId } from "./chamber/models";
 import { CHALLENGES } from "./game/challenges";
 import { PERSONALITIES, type Personality } from "../shared/mutations";
 import type { Mode } from "./game/ArenaScene";
+
+const MODEL_CREDITS = {
+  hulk: "“HULK RIGGED WITH ANIMATION” by Kapider22 · CC BY 4.0",
+  kratos: "“God of War 3 Kratos - Rigged and Texture” by S4int0fSSG · CC BY 4.0",
+  doraemon: "“Doraemon 3D” by arc98tect · CC BY 4.0",
+};
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector(s) as T;
 
@@ -48,7 +56,7 @@ export const state = {
 let selected = 0;
 let bayOpen = false;
 /** main roster + (optionally) imported characters whose models are still pending */
-const roster = () => (bayOpen ? [...CHARACTERS, ...IMPORTED] : CHARACTERS);
+const roster = () => (bayOpen ? IMPORTED : CHARACTERS);
 
 let spinning = false;
 /** Mutation roulette: picks a curated, fully supported prompt, reveals it, then submits it normally. */
@@ -110,7 +118,8 @@ function select(i: number) {
   const list = roster();
   selected = (i + list.length) % list.length;
   const def = list[selected];
-  document.querySelectorAll<HTMLElement>(".card").forEach((c, k) => c.classList.toggle("on", k === selected));
+  document.querySelectorAll<HTMLElement>(bayOpen ? ".fl-item" : ".card").forEach((c, k) => c.classList.toggle("on", k === selected));
+  if (bayOpen && def.model) featureShow(def.model);
   const sel = $("#select");
   sel.style.setProperty("--accent", def.accent);
   $("#sd-name").textContent = def.name;
@@ -122,6 +131,7 @@ function select(i: number) {
 }
 
 function start(mode: Mode, char?: CharacterId) {
+  if (mode !== "menu") closeShowcase(); // free the WebGL context before the arena / chamber run
   state.mode = mode;
   if (char) state.char = char;
   bus.emit("start", { mode, char: state.char, challenge: state.challenge });
@@ -147,7 +157,18 @@ function victoryCard(game: Phaser.Game, d: GameOver) {
   go.classList.add("on");
   go.classList.toggle("lose", !win);
   go.style.setProperty("--accent", def.accent);
-  paintPortrait(game, def, go.querySelector("canvas") as HTMLCanvasElement);
+  const cv = go.querySelector("canvas") as HTMLCanvasElement;
+  const snap = snapshots.get(def.id);
+  if (snap) {
+    const img = new Image();
+    img.onload = () => {
+      const ctx = cv.getContext("2d")!;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      const k = Math.min(cv.width / img.width, cv.height / img.height);
+      ctx.drawImage(img, (cv.width - img.width * k) / 2, cv.height - img.height * k, img.width * k, img.height * k);
+    };
+    img.src = snap;
+  } else paintPortrait(game, def, cv);
   ($("#gameover .vc-badge") as HTMLElement).textContent = def.name;
   ($("#gameover .go-title") as HTMLElement).textContent = win ? "VICTORY" : d.reason ?? "SCRAPPED";
   ($("#gameover .go-sub") as HTMLElement).textContent = win ? `${def.name} decommissioned the Arachnotron` : `${def.name} was reduced to scrap`;
@@ -219,23 +240,71 @@ export function initMenu(game: Phaser.Game) {
   };
   CHARACTERS.forEach(addCard);
   select(0);
-  // Prototype bay: imported characters (abilities ready, real models not yet in the repo)
-  const bayBtn = document.createElement("button");
-  bayBtn.id = "bay-btn";
-  bayBtn.textContent = `▸ PROTOTYPE BAY · ${IMPORTED.length} imported fighters (models pending)`;
-  $(".sel-foot").after(bayBtn);
+  // Imported 3D fighters tab: live three.js showcase of the real glTF models
+  const bayBtn = $<HTMLButtonElement>("#bay-btn");
+  const tabRoster = $<HTMLButtonElement>("#tab-roster");
+  const flist = $("#feature-list");
+  const fstatus = $("#feature-stage .fs-status");
+  const credit = $("#feature-credit");
+  const thumb = (d: CharacterDef) => (snapshots.has(d.id) ? `<img src="${snapshots.get(d.id)}" alt="">` : `<canvas width="110" height="115"></canvas>`);
+  const renderList = () => {
+    flist.innerHTML = IMPORTED.map(
+      (d, i) => `<button class="fl-item${i === selected ? " on" : ""}" data-i="${i}" style="--accent:${d.accent}">${thumb(d)}<span class="fl-txt"><b>${d.name}</b><small>${d.title}</small><em>${abilitiesOf(d).map((a) => a.name).join(" · ")}</em></span></button>`,
+    ).join("");
+    flist.querySelectorAll<HTMLCanvasElement>("canvas").forEach((c) => {
+      const d = IMPORTED[Number((c.closest(".fl-item") as HTMLElement).dataset.i)];
+      paintPortrait(game, d, c);
+    });
+  };
+  flist.addEventListener("mouseover", (e) => {
+    const b = (e.target as HTMLElement).closest(".fl-item") as HTMLElement | null;
+    if (b && Number(b.dataset.i) !== selected) select(Number(b.dataset.i));
+  });
+  flist.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest(".fl-item") as HTMLElement | null;
+    if (b) select(Number(b.dataset.i));
+  });
+  const onStatus = (id: string, st: string, msg?: string) => {
+    const d = charById(id);
+    fstatus.textContent = st === "loading" ? `LOADING ${d.name} MODEL…` : st === "error" ? `3D MODEL UNAVAILABLE (${msg ?? "error"}) — 2D rig still playable` : "";
+    fstatus.className = `fs-status ${st}`;
+    if (st === "ready") credit.textContent = `Model: ${d.model ? (MODEL_CREDITS as Record<string, string>)[d.model] : ""}`;
+  };
+  const openFeature = async () => {
+    const sc = await openShowcase($("#feature-stage"), Q.low, onStatus);
+    if (!sc) {
+      fstatus.textContent = "3D UNAVAILABLE ON THIS DEVICE — fighters still playable with their 2D rigs";
+      fstatus.className = "fs-status error";
+      return;
+    }
+    if (bayOpen && roster()[selected]?.model) featureShow(roster()[selected].model as ModelId);
+    void makeSnapshots(
+      IMPORTED.map((d) => d.model as ModelId),
+      () => renderList(),
+    );
+  };
+  const setTab = (imported: boolean) => {
+    bayOpen = imported;
+    $("#select").classList.toggle("imported", imported);
+    bayBtn.classList.toggle("on", imported);
+    tabRoster.classList.toggle("on", !imported);
+    selected = 0;
+    if (imported) {
+      renderList();
+      select(0); // Hulk first
+      void openFeature();
+    } else {
+      closeShowcase();
+      select(0);
+    }
+  };
   bayBtn.addEventListener("click", () => {
-    bayOpen = !bayOpen;
-    bayBtn.textContent = bayOpen ? "▾ HIDE PROTOTYPE BAY" : `▸ PROTOTYPE BAY · ${IMPORTED.length} imported fighters (models pending)`;
-    rosterEl.querySelectorAll(".card.proto").forEach((c) => c.remove());
-    rosterEl.classList.toggle("wide", bayOpen);
-    if (bayOpen)
-      IMPORTED.forEach((d, k) => {
-        const c = addCard(d, CHARACTERS.length + k);
-        paintPortrait(game, d, c.querySelector("canvas") as HTMLCanvasElement);
-      });
-    select(bayOpen ? CHARACTERS.length : 0);
+    setTab(true);
     bayBtn.blur();
+  });
+  tabRoster.addEventListener("click", () => {
+    setTab(false);
+    tabRoster.blur();
   });
 
   $("#go-fight").addEventListener("click", () => start("arena", roster()[selected].id));
@@ -329,8 +398,10 @@ export function initMenu(game: Phaser.Game) {
     }
     $("#clock").textContent = "";
     if (mode === "menu") {
-      if (IMPORTED.some((c) => c.id === char) && !bayOpen) bayBtn.click();
-      select(roster().findIndex((c) => c.id === char));
+      const imported = IMPORTED.some((c) => c.id === char);
+      if (imported !== bayOpen) setTab(imported);
+      else if (imported) void openFeature();
+      select(Math.max(0, roster().findIndex((c) => c.id === char)));
       return;
     }
     const d = charById(char);

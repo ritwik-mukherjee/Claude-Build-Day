@@ -1,0 +1,11 @@
+Model Information:
+* title:	God of War 3 Kratos - Rigged and Texture
+* source:	https://sketchfab.com/3d-models/god-of-war-3-kratos-rigged-and-texture-ad37e8d6a2e44f8691bf2f2ab5bdbfa9
+* author:	S4int0fSSG (https://sketchfab.com/S4int0fSSG)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "God of War 3 Kratos - Rigged and Texture" (https://sketchfab.com/3d-models/god-of-war-3-kratos-rigged-and-texture-ad37e8d6a2e44f8691bf2f2ab5bdbfa9) by S4int0fSSG (https://sketchfab.com/S4int0fSSG) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
