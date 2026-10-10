@@ -50,22 +50,50 @@
           <div id="bp-lines"></div>
         </div>
 
+        <button id="special" title="Special ability (F)"><span class="sp-key">F</span><span class="sp-name">SPECIAL</span><i></i></button>
+        <div id="sys">
+          <button id="btn-menu" title="Back to character select (Esc)">☰ FIGHTERS</button>
+          <button id="btn-mode" title="Switch between Arena and Lab">⚗ LAB</button>
+          <button id="btn-fx" title="Reduced effects for integrated GPUs (L)">FX: HIGH</button>
+        </div>
+
         <div id="fuel"><div class="fuel-label">THRUST</div><div class="fuel-bar"><div></div></div></div>
 
         <div id="console">
           <div id="compile"><div class="bar"></div><span>COMPILING MUTATION…</span></div>
-          <div class="chips">
-            <button data-p="Give my goblin giant rocket boosters">🚀 giant rocket boosters</button>
-            <button data-p="Attach a massive chain hammer to my right arm">🔨 massive chain hammer</button>
-            <button data-p="Give me a shield">🛡 shield</button>
-            <button data-p="Make my weapon heavier">⚖ make weapon heavier</button>
-          </div>
+          <div class="chips" id="chips"></div>
           <form id="prompt-form" autocomplete="off">
             <span class="caret">&gt;</span>
             <input id="prompt" maxlength="200" placeholder="Describe a mutation…  (Enter to focus · /attach shield for manual)" />
             <button type="submit">MUTATE</button>
           </form>
           <div id="console-status">A/D move · W jump · SPACE thrust · MOUSE aim · CLICK punch · Q / RMB hammer slam</div>
+        </div>
+
+        <div id="select">
+          <div class="sel-head">
+            <div class="sel-logo">RAGDOLL<span>.AI</span></div>
+            <div class="sel-sub">CHOOSE YOUR FIGHTER</div>
+          </div>
+          <div class="roster" id="roster"></div>
+          <div class="sel-detail">
+            <div class="sd-left">
+              <div class="sd-name" id="sd-name"></div>
+              <div class="sd-title" id="sd-title"></div>
+              <div class="sd-bio" id="sd-bio"></div>
+              <div class="sd-quote" id="sd-quote"></div>
+            </div>
+            <div class="sd-right">
+              <div class="sd-sp-label">SPECIAL · F</div>
+              <div class="sd-sp" id="sd-sp"></div>
+              <div class="sd-sp-desc" id="sd-sp-desc"></div>
+            </div>
+          </div>
+          <div class="sel-actions">
+            <button class="go fight" id="go-fight"><b>▶ FIGHT</b><small>vs. Arachnotron</small></button>
+            <button class="go lab" id="go-lab"><b>⚗ CHARACTER LAB</b><small>invent equipment · no pressure</small></button>
+          </div>
+          <div class="sel-foot">← → choose · ENTER fight · L lab · no API key required</div>
         </div>
 
         <div id="gameover">

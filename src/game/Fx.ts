@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { Q } from "./quality";
 
 /** One-stop juice: sparks, explosions, shockwaves, debris, flashes, floating text. */
 export class Fx {
@@ -66,12 +67,24 @@ export class Fx {
       .setBlendMode(Phaser.BlendModes.ADD);
   }
 
+  private n(v: number) {
+    return Math.max(1, Math.round(v * Q.k));
+  }
+
   burst(x: number, y: number, n = 20, cyan = false) {
-    (cyan ? this.cyanSparks : this.sparks).explode(n, x, y);
+    (cyan ? this.cyanSparks : this.sparks).explode(this.n(n), x, y);
+  }
+
+  notes(x: number, y: number, n: number) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const im = this.scene.add.image(x, y, "note").setTint(i % 2 ? 0xff4fd8 : 0xffc83d).setDepth(46).setScale(1.2);
+      this.scene.tweens.add({ targets: im, x: x + Math.cos(a) * 220, y: y + Math.sin(a) * 160 - 40, angle: Phaser.Math.Between(-60, 60), alpha: 0, duration: 800, ease: "Cubic.easeOut", onComplete: () => im.destroy() });
+    }
   }
 
   smokePuff(x: number, y: number, n = 6) {
-    this.smoke.explode(n, x, y);
+    this.smoke.explode(this.n(n), x, y);
   }
 
   shockwave(x: number, y: number, color = 0xffc83d, scale = 3, duration = 450) {
@@ -102,15 +115,15 @@ export class Fx {
   explosion(x: number, y: number, power = 1) {
     const ball = this.scene.add.image(x, y, "glow").setTint(0xffb040).setBlendMode(Phaser.BlendModes.ADD).setDepth(44).setScale(0.5);
     this.scene.tweens.add({ targets: ball, scale: 3 + 2.5 * power, alpha: 0, duration: 420 + 120 * power, ease: "Expo.easeOut", onComplete: () => ball.destroy() });
-    this.glow.explode(Math.round(6 * power), x, y);
-    this.sparks.explode(Math.round(40 * power), x, y);
-    this.streaks.explode(Math.round(24 * power), x, y);
-    this.smoke.explode(Math.round(8 * power), x, y);
+    this.glow.explode(this.n(6 * power), x, y);
+    this.sparks.explode(this.n(40 * power), x, y);
+    this.streaks.explode(this.n(24 * power), x, y);
+    this.smoke.explode(this.n(8 * power), x, y);
     this.shockwave(x, y, 0xffc83d, 2 + power * 1.5);
     if (power > 1.5) this.shockwave(x, y, 0xff3344, 1 + power, 700);
     this.flash(Math.min(0.75, 0.25 * power), 200, 0xffd8a0);
     this.shake(250 + 120 * power, 0.006 * power);
-    this.spawnDebris(x, y, Math.round(6 * power));
+    this.spawnDebris(x, y, this.n(6 * power));
   }
 
   spawnDebris(x: number, y: number, n: number) {
@@ -126,7 +139,7 @@ export class Fx {
       this.debris.push(d);
       this.scene.tweens.add({ targets: d, alpha: 0, delay: 2200, duration: 800, onComplete: () => this.destroyDebris(d) });
     }
-    while (this.debris.length > 60) this.destroyDebris(this.debris[0]);
+    while (this.debris.length > (Q.low ? 14 : 36)) this.destroyDebris(this.debris[0]);
   }
 
   private destroyDebris(d: Phaser.Physics.Matter.Image) {

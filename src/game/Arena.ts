@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import type { Fx } from "./Fx";
 import { MB } from "./util";
+import { Q } from "./quality";
 
 export const W = 1600;
 export const H = 900;
@@ -67,7 +68,8 @@ export class Arena {
         alpha: { start: 0.9, end: 0 },
         tint: [0xff7a1a, 0xffc83d, 0xff3344],
         blendMode: "ADD",
-        frequency: 90,
+        frequency: Q.low ? 260 : 110,
+        maxParticles: 90,
       })
       .setDepth(8);
 
@@ -239,7 +241,7 @@ export class Arena {
     }
     for (const l of this.lamps) {
       const d = Math.abs(l.x - x);
-      if (d < radius * 2.5) MB.setVelocity(l.body as MatterJS.BodyType, { x: Math.sign(l.x - x || 1) * power * 0.8, y: -2 });
+      if (d < radius * 2.5) MB.setVelocity(l.body as MatterJS.BodyType, { x: Math.sign(l.x - x || 1) * Math.min(5, power * 0.5), y: -1 });
     }
     // lamps flicker
     for (const g of this.lampGlows) this.scene.tweens.add({ targets: g, alpha: 0.05, duration: 60, yoyo: true, repeat: 3 });

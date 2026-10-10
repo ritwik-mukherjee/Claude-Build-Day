@@ -8,6 +8,16 @@ import { Fx } from "./Fx";
 import { Goblin } from "./Goblin";
 import { Spider, type Laser } from "./Spider";
 import { buildTextures } from "./textures";
+import { buildCharacterTextures, charById, type CharacterId } from "./characters";
+import { Q } from "./quality";
+import { MB } from "./util";
+
+export type Mode = "menu" | "arena" | "lab";
+export interface RoundCfg {
+  mode: Mode;
+  char: CharacterId;
+  challenge?: string;
+}
 
 type Body = MatterJS.BodyType;
 
@@ -40,9 +50,19 @@ export class ArenaScene extends Phaser.Scene {
   lastImpact = 0;
   mutations = 0;
   gen = 0; // bumps on every (re)start so stale async responses are ignored
+  cfg: RoundCfg = { mode: "menu", char: "goblin" };
+  acc = 0; // fixed-step accumulator (seconds)
+  bombs: { img: Phaser.Physics.Matter.Image; fuse: number }[] = [];
+  dome?: Phaser.GameObjects.Image;
+  poundT = -1;
+  domeHitCd = 0;
 
   constructor() {
     super("arena");
+  }
+
+  init(data: Partial<RoundCfg>) {
+    if (data && data.mode) this.cfg = { mode: data.mode, char: data.char ?? "goblin", challenge: data.challenge };
   }
 
   create() {
@@ -50,27 +70,30 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this, {
       lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
       nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
+      acc: 0, bombs: [], poundT: -1, domeHitCd: 0,
     });
     this.gen++;
     if (!this.textures.exists("px")) buildTextures(this);
+    buildCharacterTextures(this);
     this.matter.world.setGravity(0, 1.25);
-    this.matter.world.engine.positionIterations = 10;
-    this.matter.world.engine.velocityIterations = 8;
-    this.matter.world.engine.constraintIterations = 4;
+    // We step physics ourselves at a fixed 60 Hz (see update) so low frame rates don't slow the game down.
+    this.matter.world.autoUpdate = false;
+    this.applyQuality();
     this.cameras.main.setBounds(0, 0, W, H);
 
     this.fx = new Fx(this);
     this.arena = new Arena(this, this.fx);
-    this.goblin = new Goblin(this, 360, FLOOR_Y - 90, this.arena, this.fx);
+    const def = charById(this.cfg.char);
+    this.goblin = new Goblin(this, 360, FLOOR_Y - 120, this.arena, this.fx, def);
     this.spider = new Spider(this, 1250, FLOOR_Y - 100, this.arena, this.fx, (l) => this.lasers.push(l), (x, y, p) => this.spiderSlam(x, y, p));
     this.blueprint = this.add.graphics().setDepth(50);
 
     const kb = this.input.keyboard!;
     // enableCapture=false so typing in the DOM console still works.
-    this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,UP,LEFT,RIGHT,Q,R,E", false) as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,UP,LEFT,RIGHT,Q,R,E,F", false) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
-      if (this.cinematic || this.over) return;
+      if (this.cinematic || this.over || this.cfg.mode === "menu") return;
       if (p.rightButtonDown()) this.trySlam();
       else this.goblin.punch(p.worldX, p.worldY);
     });
@@ -85,31 +108,59 @@ export class ArenaScene extends Phaser.Scene {
     // Remove only *this scene's* listeners on shutdown (the HUD listens to "restart" too).
     const onSubmit = (text: string) => this.submitPrompt(text);
     const onFocus = (f: boolean) => (this.input.keyboard!.enabled = !f);
-    const onRestart = () => this.scene.restart();
+    const onRestart = () => this.scene.restart({ ...this.cfg });
+    const onStart = (cfg: RoundCfg) => this.scene.restart(cfg);
+    const onSpecial = () => this.useSpecial();
+    const onQuality = () => this.applyQuality();
     bus.on("submit-prompt", onSubmit);
     bus.on("console-focus", onFocus);
     bus.on("restart", onRestart);
+    bus.on("start", onStart);
+    bus.on("special", onSpecial);
+    bus.on("quality", onQuality);
     this.events.once("shutdown", () => {
       bus.off("submit-prompt", onSubmit);
       bus.off("console-focus", onFocus);
       bus.off("restart", onRestart);
+      bus.off("start", onStart);
+      bus.off("special", onSpecial);
+      bus.off("quality", onQuality);
       this.lasers = [];
     });
+    if (this.cfg.mode === "menu") {
+      for (const p of this.goblin.parts) p.setVisible(false);
+      this.spider.body.setVisible(false);
+      this.spider.gfx.setVisible(false);
+    }
+    this.dome = this.add.image(0, 0, "dome").setDepth(26).setTint(0x26f0ff).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
     bus.emit(EV.HP, { player: 1, enemy: 1 });
     bus.emit(EV.LOADOUT, []);
-    this.say("Welcome to the Foundry. Goblin vs. Arachnotron. Type a mutation to begin.", "system");
+    bus.emit("round", { ...this.cfg, def });
+    if (this.cfg.mode === "arena") this.say(`${def.name} vs. ARACHNOTRON. ${def.quote} Type a mutation to begin.`, "system");
+    else if (this.cfg.mode === "lab") this.say(`Character Lab: ${def.name}. The spider is a training dummy. Invent something stupid.`, "system");
+  }
+
+  applyQuality() {
+    const e = this.matter.world.engine;
+    e.positionIterations = Q.low ? 6 : 10;
+    e.velocityIterations = Q.low ? 4 : 8;
+    e.constraintIterations = Q.low ? 2 : 4;
   }
 
   // ---------------------------------------------------------------------
   update(_t: number, deltaMs: number) {
     const time = this.time.now;
-    const dt = Math.min(deltaMs, 50) / 1000;
-    // hit-stop
+    const dt = Math.min(deltaMs, 100) / 1000; // real seconds
+    Q.sample(deltaMs);
+    this.arena.update(time, dt);
+    if (this.cfg.mode === "menu") return; // select screen: animated backdrop only, no simulation
+
+    // hit-stop / slow-mo
     if (this.hitStop > 0) {
       this.hitStop -= dt;
       this.matter.world.engine.timing.timeScale = 0.08;
     } else this.matter.world.engine.timing.timeScale = this.baseTimeScale;
-    const sdt = dt * this.matter.world.engine.timing.timeScale;
+    const ts = this.matter.world.engine.timing.timeScale;
 
     if (!this.over && !this.cinematic) this.elapsed += dt;
     const k = this.keys;
@@ -124,17 +175,31 @@ export class ArenaScene extends Phaser.Scene {
     };
     if (this.cinematic || this.over) Object.assign(inp, { left: false, right: false, jump: false, thrust: false });
     if (Phaser.Input.Keyboard.JustDown(k.Q)) this.trySlam();
+    if (Phaser.Input.Keyboard.JustDown(k.F) || Phaser.Input.Keyboard.JustDown(k.E)) this.useSpecial();
     if (Phaser.Input.Keyboard.JustDown(k.R) && this.over) bus.emit("restart");
 
-    this.goblin.update(sdt * 60 > 0 ? dt : 0, inp, time);
+    // Fixed 60 Hz simulation with catch-up: game speed stays correct at 30-45 fps on integrated GPUs.
+    const STEP = 1 / 60;
+    this.acc += dt;
+    let steps = 0;
+    while (this.acc >= STEP && steps < 4) {
+      this.acc -= STEP;
+      steps++;
+      this.goblin.update(STEP, inp, time);
+      this.spider.update(STEP * ts, time, this.goblin.x, this.goblin.y, this.cfg.mode === "lab");
+      this.updateSpecials(STEP);
+      this.updateLasers(ts);
+      this.updateVent();
+      if (!this.spider.dead && !this.cinematic) this.checkContactDamage();
+      this.matter.world.step(STEP * 1000);
+    }
+    if (steps === 4) this.acc = 0; // drop backlog instead of spiralling
+    this.goblin.render(time);
+    this.spider.render(time);
     if (this.goblin.thrusting && Math.random() < 0.02) this.log("player rocket-boosting");
-    this.spider.update(sdt, time, this.goblin.x, this.goblin.y);
-    this.arena.update(time, dt);
-    this.updateLasers(sdt * 60);
-    this.updateVent();
-    if (!this.spider.dead && !this.cinematic) this.checkContactDamage();
 
     bus.emit(EV.FUEL, this.goblin.comps.has("rocket_booster") ? this.goblin.fuel : -1);
+    bus.emit("special-cd", this.goblin.specialCd / this.goblin.def.special.cooldown);
 
     // fell off-world safety
     if (this.goblin.y > H + 200) this.respawnGoblin();
@@ -145,7 +210,140 @@ export class ArenaScene extends Phaser.Scene {
       this.nextDirector -= dt;
       if (this.nextDirector <= 0 && !this.directorInFlight) this.callDirector();
     }
-    this.checkGameOver();
+    if (this.cfg.mode === "lab") this.labTick();
+    else this.checkGameOver();
+  }
+
+  // ---------------------------------------------------------------------
+  // Character specials (F / E / HUD button)
+  // ---------------------------------------------------------------------
+  useSpecial() {
+    const g = this.goblin;
+    if (this.cfg.mode === "menu" || this.cinematic || this.over || g.specialCd > 0 || g.hp <= 0 || g.stun > 0) return;
+    const sp = g.def.special;
+    g.specialCd = sp.cooldown;
+    this.log(`player used special ${sp.name}`);
+    const aim = this.input.activePointer;
+    switch (sp.id) {
+      case "scrap_bomb": {
+        const hand = g.socketPos("right_hand");
+        const b = this.matter.add.image(hand.x, hand.y - 10, "bomb", undefined, {
+          shape: { type: "circle", radius: 10 },
+          density: 0.004,
+          restitution: 0.4,
+          label: "bomb",
+          collisionFilter: { group: -1 },
+        });
+        b.setDepth(27);
+        const a = Math.atan2((aim.worldY || this.spider.y) - hand.y, (aim.worldX || this.spider.x) - hand.x);
+        b.setVelocity(Math.cos(a) * 14, Math.sin(a) * 14 - 6);
+        b.setAngularVelocity(0.3);
+        this.bombs.push({ img: b, fuse: 1.6 });
+        this.fx.floatText(hand.x, hand.y - 40, "FIRE IN THE HOLE", "#ffc83d", 16);
+        break;
+      }
+      case "sonic_wave": {
+        const c = new Phaser.Math.Vector2(g.head.x, g.head.y);
+        for (let i = 0; i < 3; i++)
+          this.time.delayedCall(i * 110, () => this.fx.shockwave(c.x, c.y, 0xff4fd8, 5.2 - i * 0.6, 520));
+        this.fx.notes(c.x, c.y, Q.low ? 8 : 16);
+        this.fx.flash(0.15, 160, 0xff9ff0);
+        this.fx.shake(220, 0.006);
+        this.fx.floatText(c.x, c.y - 60, "♪ HIGH NOTE ♪", "#ff4fd8", 26);
+        const R = 330;
+        if (!this.spider.dead && Phaser.Math.Distance.Between(c.x, c.y, this.spider.x, this.spider.y) < R) {
+          const d = this.spider.damage(12, c.x, 16);
+          this.fx.floatText(this.spider.x, this.spider.y - 70, `-${Math.round(d)}`, "#ff4fd8", 26);
+          this.log(`sonic shockwave hit spider for ${Math.round(d)}`);
+        }
+        for (const l of [...this.lasers])
+          if (l.dmg > 0 && Phaser.Math.Distance.Between(c.x, c.y, l.img.x, l.img.y) < R) {
+            this.fx.burst(l.img.x, l.img.y, 10, true);
+            l.life = 0;
+          }
+        this.arena.shove(c.x, c.y, R, 10, this.arena.crates.map((cr) => cr.body as MatterJS.BodyType));
+        this.emitHp();
+        break;
+      }
+      case "dome": {
+        g.domeT = 3.2;
+        this.fx.shockwave(g.x, g.y, 0x26f0ff, 2.4, 400);
+        this.fx.burst(g.x, g.y, 30, true);
+        this.fx.floatText(g.x, g.y - 90, "DOME DEPLOYED", "#26f0ff", 22);
+        break;
+      }
+      case "ground_pound": {
+        this.poundT = 0;
+        for (const p of g.parts) MB.setVelocity(p.body as MatterJS.BodyType, { x: (p.body as MatterJS.BodyType).velocity.x, y: -15 });
+        this.fx.smokePuff(g.x, g.y + g.stand, 6);
+        this.fx.floatText(g.x, g.y - 100, "GROUND POUND", "#ffc83d", 24);
+        break;
+      }
+    }
+  }
+
+  private updateSpecials(STEP: number) {
+    const g = this.goblin;
+    // bombs
+    for (const b of [...this.bombs]) {
+      b.fuse -= STEP;
+      const nearSpider = !this.spider.dead && Phaser.Math.Distance.Between(b.img.x, b.img.y, this.spider.x, this.spider.y) < 60;
+      if (b.fuse <= 0 || nearSpider || b.img.y > H) {
+        const { x, y } = b.img;
+        b.img.destroy();
+        this.bombs.splice(this.bombs.indexOf(b), 1);
+        this.fx.explosion(x, y, 1.4);
+        this.hitStop = 0.06;
+        if (!this.spider.dead && Phaser.Math.Distance.Between(x, y, this.spider.x, this.spider.y) < 140) {
+          const d = this.spider.damage(16, x, 12);
+          this.fx.floatText(this.spider.x, this.spider.y - 70, `-${Math.round(d)}`, "#ffc83d", 28);
+          this.log(`scrap bomb hit spider for ${Math.round(d)}`);
+          this.emitHp();
+        }
+        this.arena.crack(x, y, 0.8);
+      }
+    }
+    // dome
+    if (this.dome) {
+      const on = g.domeT > 0;
+      this.dome.setVisible(on);
+      if (on) {
+        this.dome.setPosition(g.x, g.y + 10).setScale(1.5 + Math.sin(this.time.now * 0.02) * 0.03).setAlpha(g.domeT < 0.6 ? (Math.floor(g.domeT * 20) % 2 ? 0.2 : 0.8) : 0.8);
+        this.domeHitCd -= STEP;
+        const d = Phaser.Math.Distance.Between(g.x, g.y, this.spider.x, this.spider.y);
+        if (d < 150 && this.domeHitCd <= 0 && !this.spider.dead) {
+          this.domeHitCd = 0.5;
+          const dmg = this.spider.damage(6, g.x, 14);
+          this.fx.burst((g.x + this.spider.x) / 2, (g.y + this.spider.y) / 2, 20, true);
+          if (dmg) this.fx.floatText(this.spider.x, this.spider.y - 70, `-${Math.round(dmg)}`, "#26f0ff", 22);
+          this.emitHp();
+        }
+      }
+    }
+    // ground pound
+    if (this.poundT >= 0) {
+      this.poundT += STEP;
+      if (this.poundT > 0.32 && this.poundT < 0.36)
+        for (const p of g.parts) MB.setVelocity(p.body as MatterJS.BodyType, { x: (p.body as MatterJS.BodyType).velocity.x * 0.3, y: 26 });
+      if (this.poundT > 0.38 && g.grounded) {
+        this.poundT = -1;
+        const gy = this.arena.groundY(g.x, g.y);
+        this.impact(g.x, gy, 2.6, true);
+      } else if (this.poundT > 2) this.poundT = -1;
+    }
+  }
+
+  private labTick() {
+    // training dummy regenerates; never dies
+    if (this.spider.hp < this.spider.maxHp * 0.25) {
+      this.spider.hp = this.spider.maxHp;
+      this.fx.floatText(this.spider.x, this.spider.y - 90, "DUMMY REBOOTED", "#5dff7a", 20);
+      this.emitHp();
+    }
+    if (this.goblin.hp < this.goblin.maxHp * 0.3) {
+      this.goblin.hp = this.goblin.maxHp;
+      this.emitHp();
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -620,6 +818,7 @@ export class ArenaScene extends Phaser.Scene {
 
   private applyDirector(d: DirectorDecision) {
     if (this.over) return;
+    if (this.cfg.mode === "lab" && d.action.startsWith("enemy_")) return; // training dummy never fights back
     const n = d.intensity;
     switch (d.action) {
       case "enemy_laser_barrage":

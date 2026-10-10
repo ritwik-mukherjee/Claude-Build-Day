@@ -5,6 +5,7 @@ import { H, W } from "./game/Arena";
 import { ArenaScene } from "./game/ArenaScene";
 import { bus, EV } from "./game/bus";
 import type { MutationPlan } from "../shared/mutations";
+import { initMenu } from "./menu";
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -38,12 +39,15 @@ form.addEventListener("submit", (e) => {
   input.value = "";
   input.blur();
 });
-document.querySelectorAll<HTMLButtonElement>(".chips button").forEach((b) =>
-  b.addEventListener("click", () => {
-    bus.emit("submit-prompt", b.dataset.p!);
-    b.blur();
-  }),
-);
+// chips are rebuilt per mode (menu.ts) — use delegation
+$("#chips").addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+  if (!b?.dataset.p) return;
+  bus.emit("submit-prompt", b.dataset.p);
+  b.blur();
+});
+initMenu(game);
+
 input.addEventListener("focus", () => bus.emit("console-focus", true));
 input.addEventListener("blur", () => bus.emit("console-focus", false));
 window.addEventListener("keydown", (e) => {
@@ -196,7 +200,9 @@ bus.on(EV.GAME_OVER, ({ winner, time, mutations, hp }: { winner: string; time: n
       ? `ARACHNOTRON DECOMMISSIONED · ${t} · ${mutations} MUTATION${mutations === 1 ? "" : "S"} · ${Math.round(hp)}% HULL`
       : `GOBLIN REDUCED TO SCRAP · ${t} · ${mutations} MUTATION${mutations === 1 ? "" : "S"}`;
 });
-bus.on("restart", () => {
+bus.on("restart", () => resetHud());
+bus.on("start", () => resetHud());
+function resetHud() {
   $("#gameover").classList.remove("on");
   $("#blueprint").classList.remove("on");
   $("#compile").classList.remove("on");
@@ -207,7 +213,7 @@ bus.on("restart", () => {
   status.textContent = statusDefault;
   tl.innerHTML = "";
   startT = performance.now();
-});
+}
 
 // Link status: only "LIVE" after the server has a real authenticated API response.
 let models = "";

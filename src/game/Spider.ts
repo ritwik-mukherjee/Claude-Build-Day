@@ -122,8 +122,14 @@ export class Spider {
     this.stateT = 0.55;
   }
 
-  update(dt: number, time: number, px: number, py: number) {
+  private px = 0;
+  private py = 0;
+  private gy = 0;
+
+  update(dt: number, time: number, px: number, py: number, passive = false) {
     const b = this.b;
+    this.px = px;
+    this.py = py;
     this.stateT -= dt;
     this.nextAttack -= dt;
     this.shieldT = Math.max(0, this.shieldT - dt);
@@ -135,15 +141,12 @@ export class Spider {
     this.body.setFlipX(this.facing < 0);
     this.body.setOrigin(this.facing < 0 ? 0.6 : 0.4, 0.5);
 
-    const gy = this.arena.groundY(this.x, this.y + 20);
+    const gy = (this.gy = this.arena.groundY(this.x, this.y + 20));
     const dist = gy - this.y;
     const STAND = 92;
     const near = dist < STAND + 30;
 
-    if (this.dead) {
-      this.drawLegs(time, gy);
-      return;
-    }
+    if (this.dead) return;
 
     // hover on legs
     if (near && this.state !== "leap") {
@@ -158,7 +161,10 @@ export class Spider {
       }
     }
 
-    if (this.state === "stalk") {
+    if (this.state === "stalk" && passive) {
+      // Character Lab training dummy: idles in place, never attacks.
+      MB.setVelocity(b, { x: b.velocity.x * 0.9, y: b.velocity.y });
+    } else if (this.state === "stalk") {
       const dx = px - this.x;
       const keep = 240;
       const want = Math.abs(dx) > keep ? Math.sign(dx) * 3.2 * rage : Math.abs(dx) < keep - 80 ? -Math.sign(dx) * 2.2 : 0;
@@ -191,7 +197,16 @@ export class Spider {
       if (this.stateT <= 0) this.state = "stalk";
     }
 
-    // visuals
+    void time;
+  }
+
+  /** per-frame visuals */
+  render(time: number) {
+    const { px, py, gy } = this;
+    if (this.dead) {
+      this.drawLegs(time, gy);
+      return;
+    }
     if (this.flashT > 0) flashWhite(this.body);
     else unflash(this.body, this.enrageT > 0 ? 0xff8080 : undefined);
     this.dome.setPosition(this.x, this.y).setAlpha(this.shieldT > 0 ? 0.35 + Math.sin(time * 0.02) * 0.1 : 0);

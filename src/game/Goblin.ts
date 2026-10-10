@@ -3,6 +3,7 @@ import { COLOR_HEX, type ComponentType, type Operation } from "../../shared/muta
 import type { Arena } from "./Arena";
 import type { Fx } from "./Fx";
 import { MB, flashWhite, unflash } from "./util";
+import { CHARACTERS, type CharacterDef } from "./characters";
 
 type Body = MatterJS.BodyType;
 type Img = Phaser.Physics.Matter.Image;
@@ -71,13 +72,26 @@ export class Goblin {
   hammerSpeed = 0;
   scanRing?: Phaser.GameObjects.Graphics;
 
+  def: CharacterDef;
+  /** torso-center height above ground when standing */
+  stand: number;
+  airJumpsLeft = 0;
+  specialCd = 0;
+  domeT = 0; // Gremlin dome: invulnerable while > 0
+  private jumpHeld = false;
+
   constructor(
     private scene: Phaser.Scene,
     x: number,
     y: number,
     private arena: Arena,
     private fx: Fx,
+    def: CharacterDef = CHARACTERS[0],
   ) {
+    this.def = def;
+    this.hp = this.maxHp = def.hp;
+    const D = def.dims;
+    const T = (p: string) => `${def.tex}_${p}`;
     const opt = (density = 0.002) => ({
       friction: 0.8,
       frictionAir: 0.03,
@@ -85,42 +99,58 @@ export class Goblin {
       collisionFilter: { group: PLAYER_GROUP, category: CAT_PLAYER },
       chamfer: { radius: 5 },
     });
-    const add = (dx: number, dy: number, key: string, w: number, h: number, density?: number) => {
+    const add = (dx: number, dy: number, key: string, [w, h]: [number, number], density?: number) => {
       const i = scene.matter.add.image(x + dx, y + dy, key, undefined, { ...opt(density), shape: { type: "rectangle", width: w, height: h } });
       i.setDepth(20);
       this.parts.push(i);
       return i;
     };
-    this.torso = add(0, 0, "g_torso", 36, 50, 0.004);
-    this.head = scene.matter.add.image(x, y - 44, "g_head", undefined, { ...opt(0.0015), shape: { type: "circle", radius: 19 } }).setDepth(21);
+    // Joint geometry is derived from part sizes so every character shares one rig.
+    const [tw, th] = D.torso;
+    const shX = tw / 2 - 3,
+      shY = -th / 2 + 7,
+      hipX = tw / 4,
+      hipY = th / 2 - 3;
+    const ua = D.uarm[1] / 2 - 3,
+      fa = D.farm[1] / 2 - 3,
+      tg = D.thigh[1] / 2 - 3,
+      sh = D.shin[1] / 2 - 4;
+    this.stand = hipY + 2 * tg + 2 + sh + D.shin[1] / 2 - 2;
+    this.torso = add(0, 0, T("torso"), D.torso, def.density);
+    this.head = scene.matter.add.image(x, y - th / 2 - D.head, T("head"), undefined, { ...opt(0.0015), shape: { type: "circle", radius: D.head } }).setDepth(21);
+    this.head.setOrigin(0.5, 0.5 - def.dims.headOffset / this.head.height);
     this.parts.push(this.head);
-    this.uarmL = add(-18, -8, "g_uarm", 12, 28);
-    this.farmL = add(-18, 20, "g_farm", 11, 28);
-    this.uarmR = add(18, -8, "g_uarm", 12, 28);
-    this.farmR = add(18, 20, "g_farm", 11, 28);
-    this.thighL = add(-9, 38, "g_thigh", 14, 28);
-    this.shinL = add(-9, 68, "g_shin", 14, 32);
-    this.thighR = add(9, 38, "g_thigh", 14, 28);
-    this.shinR = add(9, 68, "g_shin", 14, 32);
+    this.uarmL = add(-shX, shY + ua, T("uarm"), D.uarm);
+    this.farmL = add(-shX, shY + 2 * ua + fa, T("farm"), D.farm);
+    this.uarmR = add(shX, shY + ua, T("uarm"), D.uarm);
+    this.farmR = add(shX, shY + 2 * ua + fa, T("farm"), D.farm);
+    this.thighL = add(-hipX, hipY + tg, T("thigh"), D.thigh);
+    this.shinL = add(-hipX, hipY + 2 * tg + sh, T("shin"), D.shin);
+    this.thighR = add(hipX, hipY + tg, T("thigh"), D.thigh);
+    this.shinR = add(hipX, hipY + 2 * tg + sh, T("shin"), D.shin);
     this.shinL.setFriction(1.2);
     this.shinR.setFriction(1.2);
     // back limbs drawn behind
-    for (const p of [this.uarmL, this.farmL, this.thighL, this.shinL]) p.setDepth(18).setTint(0xb8c0c8);
+    for (const p of this.backParts()) p.setDepth(18).setTint(def.backTint);
 
     const j = (a: Img, b: Img, ax: number, ay: number, bx: number, by: number) =>
       scene.matter.add.constraint(a.body as Body, b.body as Body, 0, 0.95, { pointA: { x: ax, y: ay }, pointB: { x: bx, y: by }, damping: 0.1 });
-    j(this.torso, this.head, 0, -24, 0, 18);
-    j(this.torso, this.uarmL, -15, -18, 0, -11);
-    j(this.uarmL, this.farmL, 0, 11, 0, -11);
-    j(this.torso, this.uarmR, 15, -18, 0, -11);
-    j(this.uarmR, this.farmR, 0, 11, 0, -11);
-    j(this.torso, this.thighL, -9, 22, 0, -11);
-    j(this.thighL, this.shinL, 0, 11, 0, -12);
-    j(this.torso, this.thighR, 9, 22, 0, -11);
-    j(this.thighR, this.shinR, 0, 11, 0, -12);
+    j(this.torso, this.head, 0, -th / 2 + 1, 0, D.head - 1);
+    j(this.torso, this.uarmL, -shX, shY, 0, -ua);
+    j(this.uarmL, this.farmL, 0, ua, 0, -fa);
+    j(this.torso, this.uarmR, shX, shY, 0, -ua);
+    j(this.uarmR, this.farmR, 0, ua, 0, -fa);
+    j(this.torso, this.thighL, -hipX, hipY, 0, -tg);
+    j(this.thighL, this.shinL, 0, tg, 0, -sh);
+    j(this.torso, this.thighR, hipX, hipY, 0, -tg);
+    j(this.thighR, this.shinR, 0, tg, 0, -sh);
 
     // Ambient scan ring shown while a mutation request is in flight.
     this.scanRing = scene.add.graphics().setDepth(30).setVisible(false);
+  }
+
+  backParts() {
+    return [this.uarmL, this.farmL, this.thighL, this.shinL];
   }
 
   get x() {
@@ -143,13 +173,13 @@ export class Goblin {
   socketPos(socket: Operation["socket"]) {
     switch (socket) {
       case "right_hand":
-        return this.w(this.farmR, 0, 14);
+        return this.w(this.farmR, 0, this.def.dims.farm[1] / 2);
       case "left_hand":
-        return this.w(this.farmL, 0, 14);
+        return this.w(this.farmL, 0, this.def.dims.farm[1] / 2);
       case "feet":
-        return this.w(this.shinR, 0, 16);
+        return this.w(this.shinR, 0, this.def.dims.shin[1] / 2);
       case "back":
-        return this.w(this.torso, -this.facing * 20, 0);
+        return this.w(this.torso, -this.facing * (this.def.dims.torso[0] / 2 + 2), 0);
       default:
         return new Phaser.Math.Vector2(this.torso.x, this.torso.y);
     }
@@ -166,6 +196,8 @@ export class Goblin {
     this.jumpCd -= dt;
     this.invuln -= dt;
     this.stun = Math.max(0, this.stun - dt);
+    this.specialCd = Math.max(0, this.specialCd - dt);
+    this.domeT = Math.max(0, this.domeT - dt);
     const alive = this.hp > 0;
     this.facing = inp.aimX >= this.x ? 1 : -1;
     this.head.setFlipX(this.facing < 0);
@@ -173,7 +205,7 @@ export class Goblin {
     // ---- hover spring / grounding ----
     const gy = this.arena.groundY(this.x, this.y + 10);
     const dist = gy - this.y;
-    const STAND = 74;
+    const STAND = this.stand;
     this.grounded = dist < STAND + 14;
     if (alive && this.stun <= 0 && this.slamT < 0) {
       if (this.grounded && !(this.thrusting && t.velocity.y < 0)) {
@@ -182,15 +214,22 @@ export class Goblin {
       }
       // ---- horizontal ----
       const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-      const speed = this.grounded ? 6.5 : this.thrusting ? 8 : 5;
+      const sp = this.def.speed;
+      const speed = this.grounded ? sp : this.thrusting ? Math.max(8, sp) : sp * 0.77;
       const accel = this.grounded ? 0.25 : 0.08;
       if (dir !== 0 || this.grounded) MB.setVelocity(t, { x: t.velocity.x + (dir * speed - t.velocity.x) * accel, y: t.velocity.y });
       // ---- jump ----
       const springs = this.comps.get("spring_legs");
-      if (inp.jump && this.grounded && this.jumpCd <= 0) {
+      if (this.grounded) this.airJumpsLeft = this.def.airJumps;
+      const pressed = inp.jump && !this.jumpHeld;
+      if (inp.jump && this.jumpCd <= 0 && (this.grounded || (pressed && this.airJumpsLeft > 0))) {
+        if (!this.grounded) {
+          this.airJumpsLeft--;
+          this.fx.burst(this.x, this.y + 40, 14, true);
+        }
         const jm = springs ? 1 + 0.35 * springs.params.power : 1;
-        for (const p of this.parts) MB.setVelocity(p.body as Body, { x: (p.body as Body).velocity.x, y: -12.5 * jm });
-        this.jumpCd = 0.35;
+        for (const p of this.parts) MB.setVelocity(p.body as Body, { x: (p.body as Body).velocity.x, y: -this.def.jump * jm });
+        this.jumpCd = 0.3;
         if (springs) this.fx.burst(this.x, gy, 12);
       }
       // ---- upright torso ----
@@ -213,6 +252,8 @@ export class Goblin {
       this.drive(this.shinL, swing + (moving ? Math.max(0, Math.cos(this.phase)) * 0.7 * this.facing : 0) + air * this.facing, 0.4, 0.5);
       this.drive(this.shinR, -swing + (moving ? Math.max(0, -Math.cos(this.phase)) * 0.7 * this.facing : 0) + air * this.facing, 0.4, 0.5);
     }
+
+    this.jumpHeld = inp.jump;
 
     // ---- rockets ----
     const rockets = this.comps.get("rocket_booster");
@@ -258,6 +299,10 @@ export class Goblin {
       }
     }
 
+  }
+
+  /** per-frame visuals (logic runs per fixed physics step in update) */
+  render(time: number) {
     this.updateComponentVisuals(time);
   }
 
@@ -281,9 +326,9 @@ export class Goblin {
 
   /** returns damage actually taken */
   damage(n: number, fromX: number, knock = 6): number {
-    if (this.invuln > 0 || this.hp <= 0) return 0;
+    if (this.invuln > 0 || this.hp <= 0 || this.domeT > 0) return 0;
     const armor = this.comps.get("armor_plating");
-    const dmg = n * (armor ? Math.max(0.45, 1 - 0.18 * armor.params.power) : 1);
+    const dmg = n * this.def.armor * (armor ? Math.max(0.45, 1 - 0.18 * armor.params.power) : 1);
     this.hp = Math.max(0, this.hp - dmg);
     this.invuln = 0.25;
     const dir = Math.sign(this.x - fromX) || 1;
@@ -292,7 +337,7 @@ export class Goblin {
     for (const p of this.parts) flashWhite(p);
     this.scene.time.delayedCall(70, () => {
       for (const p of this.parts) unflash(p);
-      for (const p of [this.uarmL, this.farmL, this.thighL, this.shinL]) p.setTint(0xb8c0c8);
+      for (const p of this.backParts()) p.setTint(this.def.backTint);
     });
     return dmg;
   }
