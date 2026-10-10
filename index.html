@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAGDOLL.AI</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22%2326f0ff%22/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="stage">
+      <div id="game"></div>
+      <div id="hud">
+        <div class="letterbox top"></div>
+        <div class="letterbox bottom"></div>
+
+        <div id="topbar">
+          <div class="hp left">
+            <div class="hp-name">GOBLIN <span>MK-II</span></div>
+            <div class="hp-bar"><div class="lag"></div><div class="fill"></div></div>
+            <div class="hp-sub"><span id="loadout">NO MUTATIONS</span></div>
+          </div>
+          <div id="title">
+            <div class="logo">RAGDOLL<span>.AI</span></div>
+            <div id="link" class="link">LINK: …</div>
+          </div>
+          <div class="hp right">
+            <div class="hp-name">ARACHNOTRON <span>V9</span></div>
+            <div class="hp-bar"><div class="lag"></div><div class="fill"></div></div>
+            <div class="hp-sub">HOSTILE // FOUNDRY GUARDIAN</div>
+          </div>
+        </div>
+
+        <div id="director">
+          <div class="dir-tag"><i></i>AI DIRECTOR <b id="dir-src">OPUS</b></div>
+          <div id="dir-text">…</div>
+          <div id="dir-action"></div>
+        </div>
+
+        <div id="timeline">
+          <div class="tl-head">MUTATION TIMELINE</div>
+          <div id="tl-list"></div>
+        </div>
+
+        <div id="blueprint">
+          <div class="bp-head">// SCHEMATIC COMPILED</div>
+          <div id="bp-title"></div>
+          <div id="bp-lines"></div>
+        </div>
+
+        <div id="fuel"><div class="fuel-label">THRUST</div><div class="fuel-bar"><div></div></div></div>
+
+        <div id="console">
+          <div id="compile"><div class="bar"></div><span>COMPILING MUTATION…</span></div>
+          <div class="chips">
+            <button data-p="Give my goblin giant rocket boosters">🚀 giant rocket boosters</button>
+            <button data-p="Attach a massive chain hammer to my right arm">🔨 massive chain hammer</button>
+            <button data-p="Give me a shield">🛡 shield</button>
+            <button data-p="Make my weapon heavier">⚖ make weapon heavier</button>
+          </div>
+          <form id="prompt-form" autocomplete="off">
+            <span class="caret">&gt;</span>
+            <input id="prompt" maxlength="200" placeholder="Describe a mutation…  (Enter to focus · /attach shield for manual)" />
+            <button type="submit">MUTATE</button>
+          </form>
+          <div id="console-status">A/D move · W jump · SPACE thrust · MOUSE aim · CLICK punch · Q / RMB hammer slam</div>
+        </div>
+
+        <div id="gameover">
+          <div class="go-title"></div>
+          <button id="restart">REBOOT ARENA [R]</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
