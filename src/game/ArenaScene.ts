@@ -65,6 +65,9 @@ export class ArenaScene extends Phaser.Scene {
   shadows: Phaser.GameObjects.Image[] = [];
   backlights: Phaser.GameObjects.Image[] = [];
   wasThrusting = false;
+  lastFuel = -2;
+  lastCd = -1;
+  hintCd = 0;
 
   constructor() {
     super("arena");
@@ -81,7 +84,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this, {
       lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
       nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
-      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false,
+      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false, lastFuel: -2, lastCd: -1, hintCd: 0,
     });
     this.gen++;
     if (!this.textures.exists("px")) buildTextures(this);
@@ -113,7 +116,11 @@ export class ArenaScene extends Phaser.Scene {
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
       if (this.cinematic || this.over || this.cfg.mode === "menu") return;
       if (p.rightButtonDown()) this.trySlam();
-      else this.goblin.punch(p.worldX, p.worldY);
+      else {
+        this.goblin.punch(p.worldX, p.worldY);
+        const h = this.goblin.socketPos("right_hand");
+        this.fx.burst(h.x, h.y, 6);
+      }
     });
 
     // Shared action handlers (LLM plans and /commands both land here).
@@ -125,7 +132,11 @@ export class ArenaScene extends Phaser.Scene {
 
     // Remove only *this scene's* listeners on shutdown (the HUD listens to "restart" too).
     const onSubmit = (text: string) => this.submitPrompt(text);
-    const onFocus = (f: boolean) => (this.input.keyboard!.enabled = !f);
+    const onFocus = (f: boolean) => {
+      // drop held keys so a key released while typing doesn't leave the fighter walking forever
+      this.input.keyboard!.resetKeys();
+      this.input.keyboard!.enabled = !f;
+    };
     const onRestart = () => this.scene.restart({ ...this.cfg });
     const onStart = (cfg: RoundCfg) =>
       this.scene.restart({ ...cfg, ops: cfg.carry && cfg.char === this.cfg.char ? [...this.applied] : undefined });
@@ -244,8 +255,10 @@ export class ArenaScene extends Phaser.Scene {
     this.renderDepth();
     if (this.goblin.thrusting && Math.random() < 0.02) this.log("player rocket-boosting");
 
-    bus.emit(EV.FUEL, this.goblin.comps.has("rocket_booster") ? this.goblin.fuel : -1);
-    bus.emit("special-cd", this.goblin.specialCd / this.goblin.def.special.cooldown);
+    const fuel = this.goblin.comps.has("rocket_booster") ? Math.round(this.goblin.fuel * 100) / 100 : -1;
+    if (fuel !== this.lastFuel) bus.emit(EV.FUEL, (this.lastFuel = fuel));
+    const cd = Math.ceil((this.goblin.specialCd / this.goblin.def.special.cooldown) * 50) / 50;
+    if (cd !== this.lastCd) bus.emit("special-cd", (this.lastCd = cd));
 
     // fell off-world safety
     if (this.goblin.y > H + 200) this.respawnGoblin();
@@ -297,7 +310,12 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------------
   useSpecial() {
     const g = this.goblin;
-    if (this.cfg.mode === "menu" || this.cinematic || this.over || g.specialCd > 0 || g.hp <= 0 || g.stun > 0) return;
+    if (this.cfg.mode === "menu" || this.cinematic || this.over || g.hp <= 0) return;
+    if (g.specialCd > 0 || g.stun > 0) {
+      bus.emit("special-denied");
+      if (g.specialCd > 0) this.hint(`${g.def.special.name} RECHARGING`);
+      return;
+    }
     const sp = g.def.special;
     g.specialCd = sp.cooldown;
     this.log(`player used special ${sp.name}`);
@@ -704,8 +722,19 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------------
   // Combat
   // ---------------------------------------------------------------------
+  /** short, throttled hint above the fighter when an input can't do anything yet */
+  private hint(text: string) {
+    if (this.time.now < this.hintCd) return;
+    this.hintCd = this.time.now + 1500;
+    this.fx.floatText(this.goblin.x, this.goblin.y - 100, text, "#9ffcff", 15);
+  }
+
   trySlam() {
-    if (this.cinematic || this.over) return;
+    if (this.cinematic || this.over || this.cfg.mode === "menu") return;
+    if (!this.goblin.comps.has("chain_weapon")) {
+      this.hint("NO HAMMER — try “massive chain hammer”");
+      return;
+    }
     if (this.goblin.slam()) {
       this.fx.floatText(this.goblin.x, this.goblin.y - 90, "HAMMER SLAM!", "#ffc83d", 22);
       this.log("player hammer slam");

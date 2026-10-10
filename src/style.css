@@ -289,3 +289,11 @@ body.mode-lab #labpanel { display: block; }
 .sel-ch button.on { border-color: var(--gold); color: #fff; box-shadow: 0 0 12px rgba(255,200,61,0.35); }
 #clock { font-family: var(--disp); font-size: 16px; color: var(--gold); margin-top: 4px; letter-spacing: 0.2em; }
 #clock.urgent { color: var(--red); animation: blink 0.5s infinite; }
+
+/* ---------- polish: first-round controls toast + denied special feedback ---------- */
+#hint { position: absolute; left: 50%; top: 172px; transform: translate(-50%, -8px); display: flex; gap: 14px; z-index: 4; padding: 8px 16px; background: rgba(2, 12, 16, 0.88); border: 1px solid var(--cyan); font-size: 12px; color: rgba(220,245,255,0.85); letter-spacing: 0.06em; opacity: 0; pointer-events: none; transition: opacity 0.4s, transform 0.4s; white-space: nowrap; }
+#hint.on { opacity: 1; transform: translate(-50%, 0); }
+#hint b { color: #001a1c; background: var(--cyan); padding: 0 5px; margin-right: 4px; font-family: var(--disp); font-size: 10px; }
+#hud.cine #hint { opacity: 0; }
+#special.denied { animation: denied 0.3s; }
+@keyframes denied { 25% { transform: translateX(-5px); border-color: var(--red); } 75% { transform: translateX(5px); border-color: var(--red); } }

@@ -155,6 +155,18 @@ function victoryCard(game: Phaser.Game, d: GameOver) {
   if (d.build.length) muts.innerHTML += `<div class=dim>final build: ${d.build.map((b) => b.split("(")[0].replace(/_/g, " ")).join(", ")}</div>`;
 }
 
+function showControlsOnce() {
+  try {
+    if (sessionStorage.getItem("ragdoll.hinted")) return;
+    sessionStorage.setItem("ragdoll.hinted", "1");
+  } catch {
+    /* ignore */
+  }
+  const t = $("#hint");
+  t.classList.add("on");
+  setTimeout(() => t.classList.remove("on"), 7000);
+}
+
 export function initMenu(game: Phaser.Game) {
   // challenge picker (arena mode)
   const chBox = $("#sel-ch");
@@ -301,9 +313,16 @@ export function initMenu(game: Phaser.Game) {
     if (!state.carryPending) $("#lp-loadout").innerHTML = "<i>nothing bolted on yet — try a prompt or the roulette</i>";
     $(".hp.right .hp-sub").textContent = mode === "lab" ? "TRAINING DUMMY // CANNOT DIE" : "HOSTILE // FOUNDRY GUARDIAN";
     renderChips(mode === "lab" ? LAB_PROMPTS : ARENA_PROMPTS);
+    showControlsOnce();
     void def;
   });
 
+  bus.on("special-denied", () => {
+    const b = $("#special");
+    b.classList.remove("denied");
+    void b.offsetWidth;
+    b.classList.add("denied");
+  });
   bus.on("special-cd", (f: number) => {
     const b = $("#special");
     (b.querySelector("i") as HTMLElement).style.transform = `scaleX(${Math.max(0, f)})`;
