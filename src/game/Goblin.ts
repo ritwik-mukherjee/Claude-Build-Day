@@ -94,6 +94,8 @@ export class Goblin {
   speedMul = 1; // Spartan Rage
   frozenT = 0; // Anywhere Door transit: no input, no motion
   launchT = 0; // scripted leap window (Hulk Smash)
+  /** player-initiated attack window (click / slam): weapons and fists only deal damage while it's open */
+  attackT = 0;
   domeT = 0; // Gremlin dome: invulnerable while > 0
   private jumpHeld = false;
 
@@ -241,6 +243,7 @@ export class Goblin {
     this.stun = Math.max(0, this.stun - dt);
     for (let i = 0; i < this.cds.length; i++) this.cds[i] = Math.max(0, this.cds[i] - dt);
     this.launchT = Math.max(0, this.launchT - dt);
+    this.attackT = Math.max(0, this.attackT - dt);
     if (this.frozenT > 0) {
       this.frozenT -= dt;
       for (const p of this.allBodies()) MB.setVelocity(p, { x: 0, y: 0 });
@@ -368,6 +371,11 @@ export class Goblin {
     this.updateComponentVisuals(time);
   }
 
+  /** true only while the player is actively swinging / slamming: no passive contact damage */
+  get attacking() {
+    return this.attackT > 0 || this.slamming;
+  }
+
   get slamming() {
     return this.slamT >= 0;
   }
@@ -382,6 +390,7 @@ export class Goblin {
   }
 
   punch(aimX: number, aimY: number) {
+    this.attackT = 0.5;
     const glove = this.comps.get("boxing_glove");
     if (glove?.head && glove.spring) {
       // spring-loaded haymaker: extend the spring, launch the glove at the cursor, snap back later
@@ -396,6 +405,14 @@ export class Goblin {
     }
     const ang = Math.atan2(aimY - this.farmR.y, aimX - this.farmR.x);
     MB.setVelocity(this.farmR.body as Body, { x: Math.cos(ang) * 22, y: Math.sin(ang) * 22 });
+    // chain weapon: the click whips the hammer head toward the cursor (a deliberate swing)
+    const chain = this.comps.get("chain_weapon");
+    if (chain?.head) {
+      const hb = chain.head.body as Body;
+      const a = Math.atan2(aimY - hb.position.y, aimX - hb.position.x);
+      const sp = 16 + 3 * chain.params.power;
+      MB.setVelocity(hb, { x: hb.velocity.x * 0.3 + Math.cos(a) * sp, y: hb.velocity.y * 0.3 + Math.sin(a) * sp - 4 });
+    }
   }
 
   /** speed of whichever weapon head (hammer / glove) is attached */

@@ -49,6 +49,10 @@ export class ArenaScene extends Phaser.Scene {
   elapsed = 0;
   busy = false; // mutation in flight / cinematic
   cinematic = false;
+  /** Hulk "gamma drop" entrance: >0 while the fighter is being deployed into the arena */
+  deployT = 0;
+  private deployFx?: Phaser.GameObjects.Graphics;
+  private deployDropped = false;
   over = false;
   nextDirector = 9;
   directorInFlight = false;
@@ -97,7 +101,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this, {
       lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
       nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
-      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false, lastFuel: -2, lastCd: -1, hintCd: 0, lastAb: "",
+      acc: 0, deployT: 0, deployFx: undefined, deployDropped: false, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false, lastFuel: -2, lastCd: -1, hintCd: 0, lastAb: "",
     });
     this.gen++;
     if (!this.textures.exists("px")) buildTextures(this);
@@ -123,13 +127,14 @@ export class ArenaScene extends Phaser.Scene {
       if (ch.spiderHp) this.spider.hp = this.spider.maxHp = ch.spiderHp;
       if (ch.enraged) this.spider.enrage(99999);
     }
+    if (this.cfg.mode !== "menu" && def.model === "hulk") this.beginDeploy();
 
     const kb = this.input.keyboard!;
     // enableCapture=false so typing in the DOM console still works.
     this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,UP,LEFT,RIGHT,Q,R,E,F,ONE,TWO,THREE", false) as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
-      if (this.cinematic || this.over || this.cfg.mode === "menu") return;
+      if (this.cinematic || this.over || this.cfg.mode === "menu" || this.deployT > 0) return;
       if (p.rightButtonDown()) this.trySlam();
       else {
         this.goblin.punch(p.worldX, p.worldY);
@@ -249,7 +254,7 @@ export class ArenaScene extends Phaser.Scene {
       aimX: p.worldX || this.spider.x,
       aimY: p.worldY || this.spider.y,
     };
-    if (this.cinematic || this.over) Object.assign(inp, { left: false, right: false, jump: false, thrust: false });
+    if (this.cinematic || this.over || this.deployT > 0) Object.assign(inp, { left: false, right: false, jump: false, thrust: false });
     if (Phaser.Input.Keyboard.JustDown(k.Q)) this.trySlam();
     if (Phaser.Input.Keyboard.JustDown(k.F) || Phaser.Input.Keyboard.JustDown(k.E) || Phaser.Input.Keyboard.JustDown(k.ONE)) this.useSpecial(0);
     if (Phaser.Input.Keyboard.JustDown(k.TWO)) this.useSpecial(1);
@@ -274,6 +279,7 @@ export class ArenaScene extends Phaser.Scene {
       this.matter.world.step(STEP * 1000);
     }
     if (steps === 4) this.acc = 0; // drop backlog instead of spiralling
+    if (this.deployT > 0) this.updateDeploy(dt);
     this.goblin.render(time);
     this.spider.render(time);
     this.renderDepth();
@@ -341,7 +347,7 @@ export class ArenaScene extends Phaser.Scene {
   // ---------------------------------------------------------------------
   useSpecial(slot = 0) {
     const g = this.goblin;
-    if (this.cfg.mode === "menu" || this.cinematic || this.over || g.hp <= 0 || this.ab.busy) return;
+    if (this.cfg.mode === "menu" || this.cinematic || this.over || this.deployT > 0 || g.hp <= 0 || this.ab.busy) return;
     const sp = abilitiesOf(g.def)[slot];
     if (!sp) return;
     if (g.cds[slot] > 0 || g.stun > 0) {
@@ -796,7 +802,7 @@ export class ArenaScene extends Phaser.Scene {
       if (glove && (a === glove || b === glove)) {
         const other = a === glove ? b : a;
         const sp = this.goblin.weaponSpeed("boxing_glove");
-        if (other === this.spider.b && sp > 6) {
+        if (other === this.spider.b && sp > 6 && this.goblin.attacking) {
           const p = gloveC!.params;
           const dmg = Math.min(30, sp * 0.45 * (0.7 + 0.3 * p.power) * Math.sqrt(p.size) + 4 * p.rocket);
           const d = this.spider.damage(dmg, this.goblin.x, Math.min(22, sp * 0.8));
@@ -814,13 +820,13 @@ export class ArenaScene extends Phaser.Scene {
         const other = a === head ? b : a;
         const sp = this.goblin.hammerSpeed;
         const contact = pair.collision.supports?.[0] ?? head.position;
-        if (other === this.spider.b && sp > 4) {
+        if (other === this.spider.b && sp > 4 && this.goblin.attacking) {
           const dmg = Math.min(35, sp * 0.55 * Math.sqrt(chain!.params.mass) * (0.7 + 0.3 * chain!.params.power));
           const d = this.spider.damage(dmg, this.goblin.x, Math.min(16, sp * 0.6));
           this.fx.floatText(contact.x, contact.y - 20, `-${Math.round(d)}`, "#ffc83d", 30);
           this.impact(contact.x, contact.y, Math.min(3, 0.6 + sp / 18), false);
           this.log(`hammer hit spider for ${Math.round(d)}`);
-        } else if (other.label === "platform" && sp > (this.goblin.slamming ? 10 : 17)) {
+        } else if (other.label === "platform" && this.goblin.attacking && sp > (this.goblin.slamming ? 10 : 17)) {
           this.impact(contact.x, contact.y, Math.min(3, (sp / 16) * Math.pow(chain!.params.mass, 0.3) * (this.goblin.slamming ? 1.4 : 1)), true);
         } else if (other.label === "crate" && sp > 8) {
           this.fx.burst(contact.x, contact.y, 20);
@@ -986,7 +992,7 @@ export class ArenaScene extends Phaser.Scene {
     for (const fa of [this.goblin.farmR, this.goblin.farmL]) {
       const b = fa.body as Body;
       const sp = Math.hypot(b.velocity.x, b.velocity.y);
-      if (sp > 12 && Phaser.Math.Distance.Between(fa.x, fa.y, this.spider.x, this.spider.y) < 60) {
+      if (this.goblin.attacking && sp > 12 && Phaser.Math.Distance.Between(fa.x, fa.y, this.spider.x, this.spider.y) < 60) {
         const d = this.spider.damage(4, this.goblin.x, 5);
         if (d) {
           this.fx.burst(fa.x, fa.y, 14);
@@ -1004,6 +1010,60 @@ export class ArenaScene extends Phaser.Scene {
 
   emitHp() {
     bus.emit(EV.HP, { player: this.goblin.hp / this.goblin.maxHp, enemy: this.spider.hp / this.spider.maxHp, enemyHp: Math.ceil(this.spider.hp), enemyMax: this.spider.maxHp });
+  }
+
+  /** Gamma drop: a green beam marks the landing zone, Hulk falls from above the arena and lands
+   *  with the Smash impact effects. Purely presentational: no damage, input locked until landing. */
+  private beginDeploy() {
+    const g = this.goblin;
+    // land on open floor (nothing overhead) nearest the spawn point
+    let x = g.x;
+    for (let dx = 0; dx <= 500; dx += 20) {
+      const c = [g.x + dx, g.x - dx].find((cx) => cx > 80 && cx < W - 80 && this.arena.groundY(cx, -100) > FLOOR_Y - 40);
+      if (c !== undefined) {
+        x = c;
+        break;
+      }
+    }
+    const gy = this.arena.groundY(x, -100);
+    g.teleportBy(x - g.x, -(g.y + 95)); // just above the top edge (the ceiling wall sits at y≈-200)
+    g.frozenT = 0.7; // hang offscreen while the beam charges
+    g.launchT = 3; // no stand-spring cushioning while falling
+    this.deployT = 3; // safety cap; cleared on landing
+    this.spider.nextAttack = Math.max(this.spider.nextAttack, 3.5);
+    const beam = (this.deployFx = this.add.graphics().setDepth(40).setBlendMode(Phaser.BlendModes.ADD).setPosition(x, 0));
+    for (const [w, a] of [[110, 0.12], [54, 0.22], [22, 0.45], [8, 0.95]] as const) beam.fillStyle(0x7dff4a, a).fillRect(-w / 2, 0, w, gy);
+    beam.setScale(0, 1);
+    this.tweens.add({ targets: beam, scaleX: 1, duration: 260, ease: "Back.out" });
+    this.tweens.add({ targets: beam, alpha: { from: 1, to: 0.55 }, duration: 90, yoyo: true, repeat: 5 });
+    const ring = this.add.image(x, gy, this.textures.exists("ring") ? "ring" : "glow").setDepth(39).setTint(0x7dff4a).setBlendMode(Phaser.BlendModes.ADD).setScale(1.4, 0.35).setAlpha(0.9);
+    this.tweens.add({ targets: ring, scaleX: 0.6, scaleY: 0.15, duration: 600, yoyo: true, repeat: 1, onComplete: () => ring.destroy() });
+    this.fx.floatText(x, gy - 230, "GAMMA DROP INBOUND", "#7dff4a", 26);
+    this.log("Hulk deploying into the arena");
+  }
+
+  private updateDeploy(dt: number) {
+    const g = this.goblin;
+    this.deployT -= dt;
+    if (g.frozenT > 0) return;
+    if (!this.deployDropped) {
+      // release: slam downward
+      this.deployDropped = true;
+      for (const b of g.allBodies()) MB.setVelocity(b, { x: 0, y: 24 });
+      g.launchT = 3;
+    }
+    const gy = this.arena.groundY(g.x, g.y + 10);
+    if ((g.y > 0 && gy - g.y < g.stand + 30) || this.deployT <= 0) {
+      this.deployT = 0;
+      g.launchT = 0;
+      this.vfx.smashImpact(g.x, gy);
+      this.fx.shake(420, 0.02);
+      this.fx.floatText(g.x, gy - 200, "HULK DEPLOYED!", "#7dff4a", 40);
+      const beam = this.deployFx;
+      this.deployFx = undefined;
+      if (beam) this.tweens.add({ targets: beam, scaleX: 2.5, alpha: 0, duration: 380, ease: "Cubic.out", onComplete: () => beam.destroy() });
+      this.log("Hulk landed: deployment complete");
+    }
   }
 
   private respawnGoblin() {

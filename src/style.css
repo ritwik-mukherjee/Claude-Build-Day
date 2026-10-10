@@ -357,3 +357,7 @@ body.mode-lab #labpanel { display: block; }
 .fl-txt small { font-size: 11px; color: rgba(220,240,255,0.7); }
 .fl-txt em { font-style: normal; font-size: 10px; letter-spacing: 0.1em; color: var(--gold); }
 .fl-item.on { border-color: var(--accent); transform: translateX(-6px); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* Hulk in the main roster: arena sprites are rendered from the real model */
+.card.real { border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 30%, transparent); }
+.card .real-tag { margin: 6px 10px 0; padding: 3px 4px; font-size: 9px; letter-spacing: 0.12em; color: #0b1206; background: var(--accent); }

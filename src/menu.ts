@@ -1,7 +1,7 @@
 // Character select screen, mode switching, special-ability button, effects toggle.
 import type Phaser from "phaser";
 import { bus } from "./game/bus";
-import { abilitiesOf, CHARACTERS, IMPORTED, charById, paintPortrait, type CharacterDef, type CharacterId } from "./game/characters";
+import { abilitiesOf, ARCADE, IMPORTED, charById, paintPortrait, type CharacterDef, type CharacterId } from "./game/characters";
 import { Q } from "./game/quality";
 import { ROULETTE } from "../shared/fallback";
 import { closeShowcase, featureShow, makeSnapshots, openShowcase, snapshots } from "./feature";
@@ -56,7 +56,7 @@ export const state = {
 let selected = 0;
 let bayOpen = false;
 /** main roster + (optionally) imported characters whose models are still pending */
-const roster = () => (bayOpen ? IMPORTED : CHARACTERS);
+const roster = () => (bayOpen ? IMPORTED : ARCADE);
 
 let spinning = false;
 /** Mutation roulette: picks a curated, fully supported prompt, reveals it, then submits it normally. */
@@ -220,7 +220,7 @@ export function initMenu(game: Phaser.Game) {
   let painted = false;
   const addCard = (def: CharacterDef, i: number) => {
     const card = document.createElement("button");
-    card.className = def.modelPending ? "card proto" : "card";
+    card.className = def.modelPending ? "card proto" : def.model ? "card real" : "card";
     card.style.setProperty("--accent", def.accent);
     const bars = (["speed", "power", "armor", "chaos"] as const)
       .map((k) => `<div class="stat"><span>${k.toUpperCase()}</span><b>${"<i></i>".repeat(def.stats[k])}${"<i class=off></i>".repeat(5 - def.stats[k])}</b></div>`)
@@ -228,7 +228,7 @@ export function initMenu(game: Phaser.Game) {
     card.innerHTML = `<div class="pf"><canvas width="220" height="230"></canvas></div>
       <div class="cn">${def.name}</div><div class="ct">${def.title}</div>
       <div class="stats">${bars}</div><div class="csp">★ ${abilitiesOf(def).map((a) => a.short ?? a.name).join(" · ")}</div>
-      ${def.modelPending ? `<div class="pending">MODEL PENDING · PROTOTYPE RIG</div>` : ""}`;
+      ${def.modelPending ? `<div class="pending">MODEL PENDING · PROTOTYPE RIG</div>` : def.model ? `<div class="real-tag">REAL 3D MODEL · GAMMA DROP ENTRY</div>` : ""}`;
     card.addEventListener("mouseenter", () => select(i));
     card.addEventListener("focus", () => select(i));
     card.addEventListener("click", () => {
@@ -238,7 +238,7 @@ export function initMenu(game: Phaser.Game) {
     rosterEl.appendChild(card);
     return card;
   };
-  CHARACTERS.forEach(addCard);
+  ARCADE.forEach(addCard);
   select(0);
   // Imported 3D fighters tab: live three.js showcase of the real glTF models
   const bayBtn = $<HTMLButtonElement>("#bay-btn");
@@ -398,7 +398,7 @@ export function initMenu(game: Phaser.Game) {
     }
     $("#clock").textContent = "";
     if (mode === "menu") {
-      const imported = IMPORTED.some((c) => c.id === char);
+      const imported = !ARCADE.some((c) => c.id === char) || (bayOpen && IMPORTED.some((c) => c.id === char));
       if (imported !== bayOpen) setTab(imported);
       else if (imported) void openFeature();
       select(Math.max(0, roster().findIndex((c) => c.id === char)));

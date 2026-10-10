@@ -150,7 +150,7 @@ export const IMPORTED: CharacterDef[] = [
     name: "HULK",
     title: "Gamma-Powered Wrecker",
     bio: "Very large. Very green. Very unconvinced by the concept of indoor voices.",
-    quote: "“Real 3D model in the showcase; arena ragdoll uses sprites rendered from the same model.”",
+    quote: "“Puny spider.”",
     tex: "xh",
     accent: "#5dbb3a",
     dims: { torso: [52, 60], head: 20, headOffset: 0, uarm: [18, 34], farm: [19, 34], thigh: [20, 32], shin: [22, 36] },
@@ -213,6 +213,9 @@ export const IMPORTED: CharacterDef[] = [
     stats: { speed: 3, power: 2, armor: 3, chaos: 5 },
   },
 ];
+
+/** Main select-screen roster: the four originals plus Hulk (real-model arena sprites). */
+export const ARCADE: CharacterDef[] = [...CHARACTERS, IMPORTED[0]];
 
 export const charById = (id: string) => CHARACTERS.find((c) => c.id === id) ?? IMPORTED.find((c) => c.id === id) ?? CHARACTERS[0];
 export const abilitiesOf = (def: CharacterDef): AbilityDef[] => [def.special, ...(def.extra ?? [])];
