@@ -361,3 +361,8 @@ body.mode-lab #labpanel { display: block; }
 /* Hulk in the main roster: arena sprites are rendered from the real model */
 .card.real { border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 30%, transparent); }
 .card .real-tag { margin: 6px 10px 0; padding: 3px 4px; font-size: 9px; letter-spacing: 0.12em; color: #0b1206; background: var(--accent); }
+
+/* smoother walkthrough: the select screen eases in instead of popping */
+@keyframes sel-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+body.mode-menu #select { animation: sel-in 0.28s ease-out; }
+@media (prefers-reduced-motion: reduce) { body.mode-menu #select { animation: none; } }

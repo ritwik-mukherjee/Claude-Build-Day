@@ -96,6 +96,16 @@ export class Goblin {
   launchT = 0; // scripted leap window (Hulk Smash)
   /** player-initiated attack window (click / slam): weapons and fists only deal damage while it's open */
   attackT = 0;
+  /** active punch (combo jab → cross → uppercut); -1 when idle */
+  punchT = -1;
+  punchCd = 0;
+  combo = 0; // 0 jab, 1 cross, 2 uppercut (finisher)
+  private comboT = 0;
+  private punchAim = 0; // world angle of the strike
+  private punchDash = 0; // horizontal step-in speed while the strike extends
+  punchArm: "R" | "L" = "R";
+  /** set once the current punch has connected (one hit per punch) */
+  punchHit = false;
   domeT = 0; // Gremlin dome: invulnerable while > 0
   private jumpHeld = false;
 
@@ -244,6 +254,12 @@ export class Goblin {
     for (let i = 0; i < this.cds.length; i++) this.cds[i] = Math.max(0, this.cds[i] - dt);
     this.launchT = Math.max(0, this.launchT - dt);
     this.attackT = Math.max(0, this.attackT - dt);
+    this.punchCd = Math.max(0, this.punchCd - dt);
+    this.comboT = Math.max(0, this.comboT - dt);
+    if (this.punchT >= 0) {
+      this.punchT += dt;
+      if (this.punchT > 0.26) this.punchT = -1;
+    }
     if (this.frozenT > 0) {
       this.frozenT -= dt;
       for (const p of this.allBodies()) MB.setVelocity(p, { x: 0, y: 0 });
@@ -296,6 +312,7 @@ export class Goblin {
       const guard = this.comps.has("shield") ? -this.facing * 1.35 : this.facing * 0.4 + Math.sin(time * 0.004) * 0.15;
       this.drive(this.uarmL, this.comps.has("shield") ? -this.facing * 0.6 : guard, 0.3, 0.4);
       this.drive(this.farmL, guard, 0.3, 0.4);
+      if (this.punchT >= 0) this.drivePunch();
       // ---- legs: walk cycle ----
       const moving = Math.abs(t.velocity.x) > 0.8 && this.grounded;
       this.phase += moving ? Math.abs(t.velocity.x) * 0.045 : 0;
@@ -390,8 +407,52 @@ export class Goblin {
     return true;
   }
 
+  /** fist (end of the punching forearm) in world space */
+  fistPos(arm: "R" | "L" = this.punchArm) {
+    return this.w(arm === "R" ? this.farmR : this.farmL, 0, this.def.dims.farm[1] / 2);
+  }
+
+  /** extend → recoil: the punching arm is driven hard along the strike line, the elbow snaps straight */
+  private drivePunch() {
+    const t = this.punchT;
+    const ua = this.punchArm === "R" ? this.uarmR : this.uarmL,
+      fa = this.punchArm === "R" ? this.farmR : this.farmL;
+    // body angle convention: 0 = limb hanging down; a world direction a maps to a - PI/2
+    const target = this.punchAim - Math.PI / 2;
+    // sustained step-in for the first part of the strike (a single impulse is eaten by ground friction)
+    if (t < 0.12 && this.punchDash) {
+      const tb = this.torso.body as Body;
+      MB.setVelocity(tb, { x: Phaser.Math.Linear(tb.velocity.x, this.punchDash, 0.5), y: tb.velocity.y });
+    }
+    if (t < 0.05) {
+      // brief chamber: elbow cocks back
+      this.drive(ua, target - this.facing * 0.9, 0.6, 0.8);
+      this.drive(fa, target - this.facing * 1.6, 0.6, 0.8);
+    } else if (t < 0.16) {
+      this.drive(ua, target, 0.9, 0.95);
+      this.drive(fa, target, 0.9, 0.95);
+    }
+  }
+
+  /** returns false while the punch is on cooldown (prevents spam stacking) */
   punch(aimX: number, aimY: number) {
+    if (this.punchCd > 0) return false;
     this.attackT = 0.5;
+    this.punchCd = 0.2;
+    this.combo = this.comboT > 0 ? (this.combo + 1) % 3 : 0;
+    this.comboT = 0.65;
+    // always strike with the arm on the facing side (the rig's arms sit at fixed screen sides)
+    this.punchArm = this.facing > 0 ? "R" : "L";
+    this.punchT = 0;
+    this.punchHit = false;
+    const sh = this.w(this.torso, 0, -this.def.dims.torso[1] / 2 + 8);
+    // uppercut finisher rises from below the target line
+    this.punchAim = Math.atan2(aimY - sh.y - (this.combo === 2 ? 40 : 0), aimX - sh.x);
+    // step into the punch; a target just out of reach pulls the lunge further (punch magnetism)
+    const tb = this.torso.body as Body;
+    const near = Math.abs(aimX - this.x) < 190 && Math.abs(aimY - this.y) < 140;
+    this.punchDash = Math.sign(Math.cos(this.punchAim)) * (near ? 5.5 : 2.5);
+    if (this.combo === 2) MB.setVelocity(tb, { x: tb.velocity.x, y: tb.velocity.y - 3 });
     const glove = this.comps.get("boxing_glove");
     if (glove?.head && glove.spring) {
       // spring-loaded haymaker: extend the spring, launch the glove at the cursor, snap back later
@@ -402,10 +463,14 @@ export class Goblin {
       glove.spring.length = (60 + 70 * p.length) * (0.8 + 0.2 * p.size);
       glove.extendT = 0.22;
       MB.setVelocity(glove.head.body as Body, { x: Math.cos(ang) * sp, y: Math.sin(ang) * sp });
-      return;
+      this.punchT = -1; // the glove has its own collision damage
+      return true;
     }
-    const ang = Math.atan2(aimY - this.farmR.y, aimX - this.farmR.x);
-    MB.setVelocity(this.farmR.body as Body, { x: Math.cos(ang) * 22, y: Math.sin(ang) * 22 });
+    const fa = this.punchArm === "R" ? this.farmR : this.farmL;
+    const ang = Math.atan2(aimY - fa.y, aimX - fa.x);
+    this.scene.time.delayedCall(40, () => {
+      if (fa.active) MB.setVelocity(fa.body as Body, { x: Math.cos(ang) * 20, y: Math.sin(ang) * 20 });
+    });
     // chain weapon: the click whips the hammer head toward the cursor (a deliberate swing)
     const chain = this.comps.get("chain_weapon");
     if (chain?.head) {
@@ -414,6 +479,7 @@ export class Goblin {
       const sp = 16 + 3 * chain.params.power;
       MB.setVelocity(hb, { x: hb.velocity.x * 0.3 + Math.cos(a) * sp, y: hb.velocity.y * 0.3 + Math.sin(a) * sp - 4 });
     }
+    return true;
   }
 
   /** speed of whichever weapon head (hammer / glove) is attached */

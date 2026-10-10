@@ -54,6 +54,9 @@ export class ArenaScene extends Phaser.Scene {
   deployT = 0;
   private deployFx?: Phaser.GameObjects.Graphics;
   private deployDropped = false;
+  private leaving = false;
+  private punchTrail?: Phaser.GameObjects.Graphics;
+  private trailPts: { x: number; y: number }[] = [];
   over = false;
   nextDirector = 9;
   directorInFlight = false;
@@ -103,7 +106,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this, {
       lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
       nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
-      acc: 0, deployT: 0, deployFx: undefined, deployDropped: false, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false, lastFuel: -2, lastCd: -1, hintCd: 0, lastAb: "",
+      acc: 0, deployT: 0, deployFx: undefined, deployDropped: false, leaving: false, punchTrail: undefined, trailPts: [], bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [], wasThrusting: false, lastFuel: -2, lastCd: -1, hintCd: 0, lastAb: "",
     });
     this.gen++;
     if (!this.textures.exists("px")) buildTextures(this);
@@ -129,6 +132,7 @@ export class ArenaScene extends Phaser.Scene {
       if (ch.spiderHp) this.spider.hp = this.spider.maxHp = ch.spiderHp;
       if (ch.enraged) this.spider.enrage(99999);
     }
+    if (this.cfg.mode !== "menu") this.cameras.main.fadeIn(280, 5, 6, 10);
     if (this.cfg.mode !== "menu" && def.model === "hulk") this.beginDeploy();
 
     const kb = this.input.keyboard!;
@@ -139,8 +143,8 @@ export class ArenaScene extends Phaser.Scene {
       if (this.cinematic || this.over || this.cfg.mode === "menu" || this.deployT > 0) return;
       if (p.rightButtonDown()) this.trySlam();
       else {
-        this.goblin.punch(p.worldX, p.worldY);
-        const h = this.goblin.socketPos("right_hand");
+        if (!this.goblin.punch(p.worldX, p.worldY)) return; // punch cooldown: clicks don't stack
+        const h = this.goblin.fistPos();
         this.fx.burst(h.x, h.y, 6);
         this.ab.onPunch(h.x, h.y);
       }
@@ -160,9 +164,17 @@ export class ArenaScene extends Phaser.Scene {
       this.input.keyboard!.resetKeys();
       this.input.keyboard!.enabled = !f;
     };
-    const onRestart = () => this.scene.restart({ ...this.cfg });
+    // short fade-out before leaving a playable round (rematch / switch); the menu swaps instantly
+    const leave = (go: () => void) => {
+      if (this.leaving) return;
+      this.leaving = true;
+      if (this.cfg.mode === "menu") return go();
+      this.cameras.main.fadeOut(170, 5, 6, 10);
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, go);
+    };
+    const onRestart = () => leave(() => this.scene.restart({ ...this.cfg }));
     const onStart = (cfg: RoundCfg) =>
-      this.scene.restart({ ...cfg, ops: cfg.carry && cfg.char === this.cfg.char ? [...this.applied] : undefined });
+      leave(() => this.scene.restart({ ...cfg, ops: cfg.carry && cfg.char === this.cfg.char ? [...this.applied] : undefined }));
     const onSpecial = (slot?: number) => this.useSpecial(slot ?? 0);
     const onQuality = () => this.applyQuality();
     const onPersonality = () => (this.nextDirector = Math.min(this.nextDirector, 2.5));
@@ -267,11 +279,15 @@ export class ArenaScene extends Phaser.Scene {
     // Fixed 60 Hz simulation with catch-up: game speed stays correct at 30-45 fps on integrated GPUs.
     const STEP = 1 / 60;
     this.acc += dt;
+    // frame pacing: a frame that is close to one sim step runs exactly one step. Without this, normal
+    // rAF jitter around 16.7 ms makes the accumulator alternate 0/2 steps per frame (visible judder).
+    if (this.acc > STEP * 0.7 && this.acc < STEP * 1.3) this.acc = STEP;
     let steps = 0;
     while (this.acc >= STEP && steps < 4) {
       this.acc -= STEP;
       steps++;
       this.goblin.update(STEP, inp, time);
+      this.checkPunch();
       this.spider.update(STEP * ts, time, this.goblin.x, this.goblin.y, this.cfg.mode === "lab");
       this.updateSpecials(STEP);
       this.ab.step(STEP, abInp);
@@ -283,6 +299,7 @@ export class ArenaScene extends Phaser.Scene {
     if (steps === 4) this.acc = 0; // drop backlog instead of spiralling
     if (this.deployT > 0) this.updateDeploy(dt);
     this.goblin.render(time);
+    this.renderPunchTrail();
     this.spider.render(time);
     this.renderDepth();
     this.ab.render(time);
@@ -990,23 +1007,53 @@ export class ArenaScene extends Phaser.Scene {
         }
       }
     }
-    // punch / body hits on spider from fast goblin forearms
-    for (const fa of [this.goblin.farmR, this.goblin.farmL]) {
-      const b = fa.body as Body;
-      const sp = Math.hypot(b.velocity.x, b.velocity.y);
-      if (this.goblin.attacking && sp > 12 && Phaser.Math.Distance.Between(fa.x, fa.y, this.spider.x, this.spider.y) < 60) {
-        const d = this.spider.damage(4, this.goblin.x, 5);
-        if (d) {
-          this.fx.burst(fa.x, fa.y, 14);
-          this.fx.floatText(this.spider.x, this.spider.y - 60, `-${Math.round(d)}`, "#ffc83d", 22);
-          this.emitHp();
-        }
-      }
-    }
     // spider body ram
     if (Phaser.Math.Distance.Between(this.spider.x, this.spider.y, this.goblin.x, this.goblin.y) < 75) {
       const d = this.goblin.damage(5, this.spider.x, 9);
       if (d) this.emitHp();
+    }
+  }
+
+  /** Combo punch hit test: one hit per punch while the fist is travelling (jab → cross → uppercut). */
+  private checkPunch() {
+    const g = this.goblin;
+    if (g.punchT < 0.04 || g.punchT > 0.2 || g.punchHit || this.spider.dead || g.hp <= 0) return;
+    const f = g.fistPos();
+    // test against the visible body: armoured hull plus the optic head / cannon that point at the
+    // player (an ellipse much wider than the physics circle, shifted toward the spider's front)
+    const fist = Math.max(14, g.def.dims.farm[0] * 0.7); // impact radius of the fist
+    const ex = (f.x - (this.spider.x + this.spider.facing * 12)) / (96 + fist),
+      ey = (f.y - this.spider.y) / (56 + fist);
+    if (ex * ex + ey * ey > 1) return;
+    g.punchHit = true;
+    const fin = g.combo === 2;
+    const base = 3 + 1.4 * g.def.stats.power; // goblin 7.2, hulk 10
+    const d = this.spider.damage(base * (fin ? 1.6 : 1), g.x, fin ? 14 : 3, fin); // light hits barely move it so the combo can follow up
+    if (!d) return;
+    if (fin) MB.setVelocity(this.spider.b, { x: this.spider.b.velocity.x + g.facing * 4, y: -9 }); // uppercut pops it up
+    this.hitStop = Math.max(this.hitStop, fin ? 0.09 : 0.045);
+    this.fx.burst(f.x, f.y, fin ? 22 : 12);
+    this.fx.shockwave(f.x, f.y, fin ? 0xffc83d : 0xffffff, fin ? 1.1 : 0.6, fin ? 220 : 150);
+    this.fx.shake(fin ? 180 : 90, fin ? 0.009 : 0.004);
+    this.fx.floatText(this.spider.x, this.spider.y - 70, `-${Math.round(d)}`, fin ? "#ffc83d" : "#ffffff", fin ? 30 : 22);
+    if (fin) this.fx.floatText(f.x, f.y - 40, "UPPERCUT!", "#ffc83d", 24);
+    this.log(`${fin ? "uppercut" : g.combo === 1 ? "cross" : "jab"} hit spider for ${Math.round(d)}`);
+    this.emitHp();
+  }
+
+  /** short fading streak behind the fist while a punch is extending */
+  private renderPunchTrail() {
+    const g = this.goblin;
+    this.punchTrail ??= this.add.graphics().setDepth(22).setBlendMode(Phaser.BlendModes.ADD);
+    const tr = this.punchTrail.clear();
+    if (g.punchT >= 0.03 && g.punchT < 0.2 && !g.hidden) {
+      this.trailPts.push(g.fistPos());
+      if (this.trailPts.length > 6) this.trailPts.shift();
+    } else if (this.trailPts.length) this.trailPts.shift();
+    const pts = this.trailPts;
+    for (let i = 1; i < pts.length; i++) {
+      const k = i / pts.length;
+      tr.lineStyle(2 + k * 7, g.combo === 2 ? 0xffc83d : 0xffffff, 0.08 + k * 0.32).lineBetween(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y);
     }
   }
 
