@@ -25,6 +25,7 @@
           <div id="title">
             <div class="logo">RAGDOLL<span>.AI</span></div>
             <div id="link" class="link">LINK: …</div>
+            <div id="clock"></div>
           </div>
           <div class="hp right">
             <div class="hp-name">ARACHNOTRON <span>V9</span></div>
@@ -113,6 +114,7 @@
               <div class="sd-sp-desc" id="sd-sp-desc"></div>
             </div>
           </div>
+          <div class="sel-ch" id="sel-ch"></div>
           <div class="sel-actions">
             <button class="go fight" id="go-fight"><b>▶ FIGHT</b><small>vs. Arachnotron</small></button>
             <button class="go lab" id="go-lab"><b>⚗ CHARACTER LAB</b><small>invent equipment · no pressure</small></button>
@@ -121,9 +123,23 @@
         </div>
 
         <div id="gameover">
-          <div class="go-title"></div>
-          <div class="go-sub"></div>
-          <button id="restart">REBOOT ARENA [R]</button>
+          <div class="vc">
+            <div class="vc-pf"><canvas width="260" height="280"></canvas><div class="vc-badge"></div></div>
+            <div class="vc-body">
+              <div class="go-title"></div>
+              <div class="go-sub"></div>
+              <div class="vc-ch"></div>
+              <div class="vc-stats"></div>
+              <div class="vc-label">MUTATIONS THIS ROUND</div>
+              <div class="vc-muts"></div>
+              <div class="vc-btns">
+                <button id="restart" class="vb main">⟲ REMATCH <small>R</small></button>
+                <button id="vc-build" class="vb">⟲ REMATCH WITH BUILD <small>B</small></button>
+                <button id="vc-fighters" class="vb">☰ FIGHTERS <small>ESC</small></button>
+                <button id="vc-lab" class="vb">⚗ LAB</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

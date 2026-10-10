@@ -4,6 +4,7 @@ import { bus } from "./game/bus";
 import { CHARACTERS, charById, paintPortrait, type CharacterDef, type CharacterId } from "./game/characters";
 import { Q } from "./game/quality";
 import { ROULETTE } from "../shared/fallback";
+import { CHALLENGES } from "./game/challenges";
 import { PERSONALITIES, type Personality } from "../shared/mutations";
 import type { Mode } from "./game/ArenaScene";
 
@@ -122,7 +123,62 @@ function start(mode: Mode, char?: CharacterId) {
   bus.emit("start", { mode, char: state.char, challenge: state.challenge });
 }
 
+interface GameOver {
+  winner: string;
+  reason?: string;
+  time: number;
+  mutations: number;
+  hp: number;
+  char: CharacterId;
+  challenge: string;
+  cleared: boolean;
+  build: string[];
+  summaries: string[];
+}
+
+function victoryCard(game: Phaser.Game, d: GameOver) {
+  const go = $("#gameover");
+  const def = charById(d.char);
+  const win = d.winner === "player";
+  go.classList.add("on");
+  go.classList.toggle("lose", !win);
+  go.style.setProperty("--accent", def.accent);
+  paintPortrait(game, def, go.querySelector("canvas") as HTMLCanvasElement);
+  ($("#gameover .vc-badge") as HTMLElement).textContent = def.name;
+  ($("#gameover .go-title") as HTMLElement).textContent = win ? "VICTORY" : d.reason ?? "SCRAPPED";
+  ($("#gameover .go-sub") as HTMLElement).textContent = win ? `${def.name} decommissioned the Arachnotron` : `${def.name} was reduced to scrap`;
+  ($("#gameover .vc-ch") as HTMLElement).innerHTML = `${d.challenge} · <b class="${d.cleared ? "ok" : "bad"}">${d.cleared ? "CLEARED" : "FAILED"}</b>`;
+  const t = `${String(Math.floor(d.time / 60)).padStart(2, "0")}:${String(Math.floor(d.time % 60)).padStart(2, "0")}`;
+  ($("#gameover .vc-stats") as HTMLElement).innerHTML = `<div><b>${t}</b><span>TIME</span></div><div><b>${d.mutations}</b><span>MUTATIONS</span></div><div><b>${Math.round(d.hp)}%</b><span>HULL</span></div>`;
+  const muts = $("#gameover .vc-muts");
+  muts.innerHTML = d.summaries.length ? d.summaries.map((m) => `<div>▸ ${m.replace(/</g, "&lt;")}</div>`).join("") : "<div class=dim>none — bare chassis. Respect.</div>";
+  if (d.build.length) muts.innerHTML += `<div class=dim>final build: ${d.build.map((b) => b.split("(")[0].replace(/_/g, " ")).join(", ")}</div>`;
+}
+
 export function initMenu(game: Phaser.Game) {
+  // challenge picker (arena mode)
+  const chBox = $("#sel-ch");
+  const renderCh = () =>
+    (chBox.innerHTML =
+      `<span class="lbl">CHALLENGE</span>` +
+      CHALLENGES.map((c) => `<button data-c="${c.id}" class="${c.id === state.challenge ? "on" : ""}" title="${c.desc}">${c.name}<small>${c.desc}</small></button>`).join(""));
+  chBox.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+    if (!b) return;
+    state.challenge = b.dataset.c!;
+    renderCh();
+  });
+  renderCh();
+  bus.on("game-over", (d: GameOver) => victoryCard(game, d));
+  bus.on("clock", (left: number) => {
+    const el = $("#clock");
+    el.textContent = `⏱ ${Math.ceil(left)}s`;
+    el.classList.toggle("urgent", left < 15);
+  });
+  $("#vc-build").addEventListener("click", () => bus.emit("start", { mode: "arena", char: state.char, challenge: state.challenge, carry: true }));
+  $("#vc-fighters").addEventListener("click", () => start("menu"));
+  $("#vc-lab").addEventListener("click", () => start("lab"));
+
   const roster = $("#roster");
   let painted = false;
   CHARACTERS.forEach((def, i) => {
@@ -209,6 +265,8 @@ export function initMenu(game: Phaser.Game) {
     }
     if (typing) return;
     if (e.key === "Escape") start("menu");
+    if ((e.key === "b" || e.key === "B") && $("#gameover").classList.contains("on"))
+      bus.emit("start", { mode: "arena", char: state.char, challenge: state.challenge, carry: true });
     if (e.key === "l" || e.key === "L") {
       Q.set(!Q.low);
       renderFx();
@@ -225,6 +283,7 @@ export function initMenu(game: Phaser.Game) {
       painted = true;
       document.querySelectorAll<HTMLCanvasElement>(".card canvas").forEach((c, k) => paintPortrait(game, CHARACTERS[k], c));
     }
+    $("#clock").textContent = "";
     if (mode === "menu") {
       select(CHARACTERS.findIndex((c) => c.id === char));
       return;

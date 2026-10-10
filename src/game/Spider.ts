@@ -36,6 +36,7 @@ export class Spider {
   hp = 160;
   maxHp = 160;
   private invuln = 0;
+  vuln = 1; // damage taken multiplier (challenges)
   facing = -1;
   state: State = "stalk";
   stateT = 0;
@@ -90,7 +91,7 @@ export class Spider {
   damage(n: number, fromX: number, knock = 8): number {
     if (this.dead || this.invuln > 0) return 0;
     this.invuln = 0.2;
-    const dmg = n * (this.shieldT > 0 ? 0.3 : 1);
+    const dmg = n * this.vuln * (this.shieldT > 0 ? 0.3 : 1);
     this.hp = Math.max(0, this.hp - dmg);
     this.flashT = 0.08;
     MB.setVelocity(this.b, { x: Math.sign(this.x - fromX) * knock, y: -knock * 0.6 });

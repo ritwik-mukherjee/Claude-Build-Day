@@ -123,14 +123,7 @@ html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50%
 @keyframes scan { from { left: -40%; } to { left: 100%; } }
 
 /* ---------- game over ---------- */
-#gameover { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: rgba(0,0,0,0.55); z-index: 6; }
-#gameover.on { display: flex; }
-.go-title { font-family: var(--disp); font-weight: 900; font-size: 64px; letter-spacing: 0.15em; color: #fff; text-shadow: 0 0 20px var(--orange), 0 0 60px var(--orange); }
-.go-sub { font-family: var(--mono); font-size: 16px; letter-spacing: 0.2em; color: var(--gold); margin-top: -10px; }
-#gameover.lose .go-title { text-shadow: 0 0 20px var(--red), 0 0 60px var(--red); }
-#gameover.lose .go-sub { color: var(--red); }
-#gameover button { pointer-events: auto; font-family: var(--disp); letter-spacing: 0.2em; color: var(--cyan); background: transparent; border: 1px solid var(--cyan); padding: 12px 22px; cursor: pointer; }
-
+#gameover.lose #gameover.lose 
 /* impact pulse on whole HUD */
 #hud.impact #topbar { animation: hit 0.25s; }
 
@@ -260,3 +253,39 @@ body.mode-lab #labpanel { display: block; }
 .dir-pers button { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; color: rgba(255,200,160,0.55); background: transparent; border: 1px solid rgba(255,122,26,0.3); padding: 1px 6px; cursor: pointer; }
 .dir-pers button:hover { color: #fff; border-color: var(--orange); }
 .dir-pers button.on { color: #1a0800; background: var(--orange); border-color: var(--orange); }
+
+/* ---------- victory card ---------- */
+#gameover { --accent: var(--cyan); position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); z-index: 6; }
+#gameover.on { display: flex; animation: vcin 0.45s cubic-bezier(.2,1.3,.4,1); }
+@keyframes vcin { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+.vc { display: flex; gap: 0; width: min(860px, 92vw); background: linear-gradient(135deg, rgba(14,20,28,0.97), rgba(6,8,12,0.97)); border: 2px solid var(--accent); box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 40%, transparent); clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px); }
+.vc-pf { position: relative; width: 260px; flex: none; background: radial-gradient(ellipse at 50% 80%, color-mix(in srgb, var(--accent) 45%, transparent), transparent 70%), #0a0d12; border-right: 1px solid rgba(255,255,255,0.08); }
+.vc-pf canvas { width: 100%; height: 100%; display: block; }
+.vc-badge { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-family: var(--disp); font-weight: 900; font-size: 14px; letter-spacing: 0.15em; color: var(--accent); }
+.vc-body { flex: 1; padding: 18px 22px; display: flex; flex-direction: column; gap: 6px; }
+.go-title { font-family: var(--disp); font-weight: 900; font-size: 52px; letter-spacing: 0.12em; color: #fff; line-height: 1; text-shadow: 0 0 20px var(--orange), 0 0 50px var(--orange); }
+#gameover.lose .go-title { text-shadow: 0 0 20px var(--red), 0 0 50px var(--red); }
+.go-sub { font-size: 14px; letter-spacing: 0.1em; color: var(--gold); }
+#gameover.lose .go-sub { color: var(--red); }
+.vc-ch { font-family: var(--disp); font-size: 11px; letter-spacing: 0.2em; color: rgba(220,240,255,0.7); }
+.vc-ch b.ok { color: #5dff7a; } .vc-ch b.bad { color: var(--red); }
+.vc-stats { display: flex; gap: 10px; margin: 6px 0; }
+.vc-stats div { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 6px 10px; }
+.vc-stats b { display: block; font-family: var(--disp); font-size: 22px; color: #fff; }
+.vc-stats span { font-size: 9px; letter-spacing: 0.2em; color: rgba(220,240,255,0.5); }
+.vc-label { font-family: var(--disp); font-size: 9px; letter-spacing: 0.25em; color: var(--cyan); margin-top: 4px; }
+.vc-muts { font-size: 13px; color: #e6f4ff; display: flex; flex-direction: column; gap: 3px; max-height: 120px; overflow: hidden; }
+.vc-muts .dim { color: rgba(220,240,255,0.45); font-size: 12px; }
+.vc-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.vb { pointer-events: auto; font-family: var(--disp); font-size: 11px; letter-spacing: 0.12em; color: var(--cyan); background: rgba(4,20,28,0.8); border: 1px solid var(--cyan-dim); padding: 9px 12px; cursor: pointer; }
+.vb small { opacity: 0.6; margin-left: 4px; }
+.vb.main { color: #001a1c; background: var(--cyan); border-color: var(--cyan); font-weight: 700; }
+.vb:hover { filter: brightness(1.2); }
+/* challenge picker */
+.sel-ch { display: flex; gap: 6px; align-items: stretch; flex-wrap: wrap; justify-content: center; max-width: 94vw; }
+.sel-ch .lbl { font-family: var(--disp); font-size: 10px; letter-spacing: 0.25em; color: var(--gold); align-self: center; margin-right: 4px; }
+.sel-ch button { display: flex; flex-direction: column; align-items: flex-start; font-family: var(--disp); font-size: 11px; letter-spacing: 0.1em; color: rgba(255,255,255,0.75); background: rgba(10,12,16,0.85); border: 1px solid rgba(255,255,255,0.12); padding: 6px 10px; cursor: pointer; max-width: 190px; text-align: left; }
+.sel-ch button small { font-family: var(--mono); font-size: 10px; letter-spacing: 0; color: rgba(220,240,255,0.5); margin-top: 2px; }
+.sel-ch button.on { border-color: var(--gold); color: #fff; box-shadow: 0 0 12px rgba(255,200,61,0.35); }
+#clock { font-family: var(--disp); font-size: 16px; color: var(--gold); margin-top: 4px; letter-spacing: 0.2em; }
+#clock.urgent { color: var(--red); animation: blink 0.5s infinite; }

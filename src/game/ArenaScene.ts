@@ -10,6 +10,7 @@ import { Spider, type Laser } from "./Spider";
 import { buildTextures } from "./textures";
 import { buildCharacterTextures, charById, type CharacterId } from "./characters";
 import { Q } from "./quality";
+import { challengeById } from "./challenges";
 import { MB } from "./util";
 import { state as menuState } from "../menu";
 
@@ -53,6 +54,7 @@ export class ArenaScene extends Phaser.Scene {
   blueprint!: Phaser.GameObjects.Graphics;
   lastImpact = 0;
   mutations = 0;
+  summaries: string[] = [];
   gen = 0; // bumps on every (re)start so stale async responses are ignored
   cfg: RoundCfg = { mode: "menu", char: "goblin" };
   acc = 0; // fixed-step accumulator (seconds)
@@ -76,7 +78,7 @@ export class ArenaScene extends Phaser.Scene {
     Object.assign(this, {
       lasers: [], events_: [], round: 0, elapsed: 0, busy: false, cinematic: false, over: false,
       nextDirector: 9, directorInFlight: false, hitStop: 0, baseTimeScale: 1, lastImpact: 0, mutations: 0,
-      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [],
+      acc: 0, bombs: [], poundT: -1, domeHitCd: 0, applied: [], summaries: [],
     });
     this.gen++;
     if (!this.textures.exists("px")) buildTextures(this);
@@ -93,6 +95,13 @@ export class ArenaScene extends Phaser.Scene {
     this.goblin = new Goblin(this, 360, FLOOR_Y - 120, this.arena, this.fx, def);
     this.spider = new Spider(this, 1250, FLOOR_Y - 100, this.arena, this.fx, (l) => this.lasers.push(l), (x, y, p) => this.spiderSlam(x, y, p));
     this.blueprint = this.add.graphics().setDepth(50);
+    if (this.cfg.mode === "arena") {
+      const ch = challengeById(this.cfg.challenge);
+      if (ch.playerHpMul) this.goblin.hp = this.goblin.maxHp = Math.round(this.goblin.maxHp * ch.playerHpMul);
+      if (ch.dealMul) this.spider.vuln = ch.dealMul;
+      if (ch.spiderHp) this.spider.hp = this.spider.maxHp = ch.spiderHp;
+      if (ch.enraged) this.spider.enrage(99999);
+    }
 
     const kb = this.input.keyboard!;
     // enableCapture=false so typing in the DOM console still works.
@@ -378,6 +387,10 @@ export class ArenaScene extends Phaser.Scene {
   async submitPrompt(text: string) {
     text = text.trim();
     if (!text || this.busy || this.over) return;
+    if (this.cfg.mode === "arena" && challengeById(this.cfg.challenge).noMutations) {
+      bus.emit(EV.MUTATION_ERROR, { error: "FACTORY SETTINGS challenge: mutations are disabled. Use your special (F)!" });
+      return;
+    }
     this.busy = true;
     bus.emit(EV.MUTATION_START, { prompt: text });
     this.goblin.scanRing?.setVisible(true);
@@ -403,6 +416,7 @@ export class ArenaScene extends Phaser.Scene {
       this.goblin.scanRing?.setVisible(false);
       await this.playTransformation(plan, source);
       this.mutations++;
+      this.summaries.push(plan.summary);
       bus.emit(EV.MUTATION_DONE, { plan, source });
       this.emitLoadout();
       this.log(`player mutated: ${plan.summary}`);
@@ -881,8 +895,35 @@ export class ArenaScene extends Phaser.Scene {
     }
   }
 
+  private gameOverPayload(winner: "player" | "enemy", reason?: string) {
+    const ch = challengeById(this.cfg.challenge);
+    return {
+      winner,
+      reason,
+      time: this.elapsed,
+      mutations: this.mutations,
+      hp: winner === "player" ? (this.goblin.hp / this.goblin.maxHp) * 100 : 0,
+      char: this.goblin.def.id,
+      challenge: ch.name,
+      cleared: winner === "player",
+      build: this.goblin.list(),
+      summaries: this.summaries.slice(-4),
+    };
+  }
+
   private checkGameOver() {
     if (this.over) return;
+    const ch = challengeById(this.cfg.challenge);
+    if (ch.timeLimit) {
+      const left = Math.max(0, ch.timeLimit - this.elapsed);
+      bus.emit("clock", left);
+      if (left <= 0 && !this.spider.dead) {
+        this.over = true;
+        this.say("TIME. The spider clocks out undefeated.", "system");
+        this.time.delayedCall(600, () => bus.emit(EV.GAME_OVER, this.gameOverPayload("enemy", "TIME UP")));
+        return;
+      }
+    }
     if (this.spider.dead) {
       this.over = true;
       const sx = this.spider.x,
@@ -892,13 +933,13 @@ export class ArenaScene extends Phaser.Scene {
         this.spider.body.setVisible(false);
         this.spider.gfx.setVisible(false);
         this.fx.explosion(sx, sy, 3);
-        bus.emit(EV.GAME_OVER, { winner: "player", time: this.elapsed, mutations: this.mutations, hp: this.goblin.hp });
+        bus.emit(EV.GAME_OVER, this.gameOverPayload("player"));
       });
       this.say("ARACHNOTRON DECOMMISSIONED. The crowd is… mildly impressed.", "system");
     } else if (this.goblin.hp <= 0) {
       this.over = true;
-      this.time.delayedCall(900, () => bus.emit(EV.GAME_OVER, { winner: "enemy", time: this.elapsed, mutations: this.mutations, hp: 0 }));
-      this.say("Goblin reduced to scrap. Reboot with R.", "system");
+      this.time.delayedCall(900, () => bus.emit(EV.GAME_OVER, this.gameOverPayload("enemy")));
+      this.say(`${this.goblin.def.name} reduced to scrap. R to rematch.`, "system");
     }
   }
 

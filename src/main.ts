@@ -189,17 +189,7 @@ bus.on(EV.IMPACT, () => {
   void hud.offsetWidth;
   hud.classList.add("impact");
 });
-bus.on(EV.GAME_OVER, ({ winner, time, mutations, hp }: { winner: string; time: number; mutations: number; hp: number }) => {
-  const go = $("#gameover");
-  go.classList.add("on");
-  go.classList.toggle("lose", winner !== "player");
-  ($("#gameover .go-title") as HTMLElement).textContent = winner === "player" ? "VICTORY" : "SCRAPPED";
-  const t = `${String(Math.floor(time / 60)).padStart(2, "0")}:${String(Math.floor(time % 60)).padStart(2, "0")}`;
-  ($("#gameover .go-sub") as HTMLElement).textContent =
-    winner === "player"
-      ? `ARACHNOTRON DECOMMISSIONED · ${t} · ${mutations} MUTATION${mutations === 1 ? "" : "S"} · ${Math.round(hp)}% HULL`
-      : `GOBLIN REDUCED TO SCRAP · ${t} · ${mutations} MUTATION${mutations === 1 ? "" : "S"}`;
-});
+// game-over / victory card lives in menu.ts
 bus.on("restart", () => resetHud());
 bus.on("start", () => resetHud());
 function resetHud() {
