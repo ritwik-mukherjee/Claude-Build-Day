@@ -4,8 +4,26 @@ import Phaser from "phaser";
 // Playable characters. All four share the same active-ragdoll + mutation system
 // (Goblin.ts); they differ in proportions, physics profile, art and special.
 // ---------------------------------------------------------------------------
-export type CharacterId = "goblin" | "diva" | "gremlin" | "menace";
-export type SpecialId = "scrap_bomb" | "sonic_wave" | "dome" | "ground_pound";
+export type CharacterId = "goblin" | "diva" | "gremlin" | "menace" | "kratos" | "doraemon";
+export type SpecialId =
+  | "scrap_bomb"
+  | "sonic_wave"
+  | "dome"
+  | "ground_pound"
+  // imported-character abilities (src/game/abilities.ts)
+  | "leviathan_axe"
+  | "spartan_rage"
+  | "air_cannon"
+  | "bamboo_copter"
+  | "anywhere_door";
+
+export interface AbilityDef {
+  id: SpecialId;
+  name: string;
+  short?: string; // label for the ability strip
+  desc: string;
+  cooldown: number;
+}
 
 export interface CharacterDef {
   id: CharacterId;
@@ -31,7 +49,10 @@ export interface CharacterDef {
   jump: number;
   airJumps: number;
   backTint: number;
-  special: { id: SpecialId; name: string; desc: string; cooldown: number };
+  special: AbilityDef; // slot 1 (F / E / 1)
+  extra?: AbilityDef[]; // slots 2, 3 (keys 2 / 3)
+  /** imported character whose real 3D/2D model is not in the repo yet: uses a neutral prototype rig */
+  modelPending?: boolean;
   stats: { speed: number; power: number; armor: number; chaos: number }; // 1..5 for the select screen
 }
 
@@ -114,7 +135,61 @@ export const CHARACTERS: CharacterDef[] = [
   },
 ];
 
-export const charById = (id: string) => CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
+// ---------------------------------------------------------------------------
+// Imported characters (models supplied separately). Mechanics are bound to these
+// stable ids; until the model files exist they render as a clearly-labelled neutral
+// prototype rig and are kept out of the main roster (select screen "prototype bay").
+// ---------------------------------------------------------------------------
+export const IMPORTED: CharacterDef[] = [
+  {
+    id: "kratos",
+    name: "KRATOS",
+    title: "Imported fighter · model pending",
+    bio: "Throws his axe, recalls it, and is extremely annoyed by spiders.",
+    quote: "“Prototype rig — real model pending import.”",
+    tex: "xk",
+    accent: "#e0402a",
+    dims: { torso: [40, 56], head: 18, headOffset: 0, uarm: [15, 32], farm: [15, 32], thigh: [17, 32], shin: [18, 36] },
+    density: 0.005,
+    hp: 140,
+    armor: 0.85,
+    speed: 6.2,
+    jump: 12.5,
+    airJumps: 0,
+    backTint: 0xa8a0a0,
+    special: { id: "leviathan_axe", name: "LEVIATHAN AXE", short: "AXE", desc: "Throw the axe; it recalls along an arc and can hit on the way back.", cooldown: 2.2 },
+    extra: [{ id: "spartan_rage", name: "SPARTAN RAGE", short: "RAGE", desc: "6 s: ground-slam entry, shockwave punches, 1.4× damage dealt, half damage taken.", cooldown: 18 }],
+    modelPending: true,
+    stats: { speed: 3, power: 5, armor: 4, chaos: 3 },
+  },
+  {
+    id: "doraemon",
+    name: "DORAEMON",
+    title: "Imported fighter · model pending",
+    bio: "Pulls gadgets out of a pocket. The pocket is bigger on the inside.",
+    quote: "“Prototype rig — real model pending import.”",
+    tex: "xd",
+    accent: "#2a9df4",
+    dims: { torso: [40, 38], head: 24, headOffset: 0, uarm: [10, 18], farm: [11, 18], thigh: [13, 14], shin: [16, 16] },
+    density: 0.004,
+    hp: 100,
+    armor: 1,
+    speed: 6.5,
+    jump: 12,
+    airJumps: 0,
+    backTint: 0xa0b4c8,
+    special: { id: "air_cannon", name: "AIR CANNON", short: "AIR CANNON", desc: "Compressed-air blast: big knockback, light damage.", cooldown: 1.2 },
+    extra: [
+      { id: "bamboo_copter", name: "BAMBOO COPTER", short: "COPTER", desc: "Rotor hover for up to 5 s (hold W/SPACE to climb), safe landing after.", cooldown: 9 },
+      { id: "anywhere_door", name: "ANYWHERE DOOR", short: "DOOR", desc: "Step through a door and out of another one somewhere safe.", cooldown: 8 },
+    ],
+    modelPending: true,
+    stats: { speed: 3, power: 2, armor: 3, chaos: 5 },
+  },
+];
+
+export const charById = (id: string) => CHARACTERS.find((c) => c.id === id) ?? IMPORTED.find((c) => c.id === id) ?? CHARACTERS[0];
+export const abilitiesOf = (def: CharacterDef): AbilityDef[] => [def.special, ...(def.extra ?? [])];
 
 // ---------------------------------------------------------------------------
 // Procedural textures for the three new characters (Goblin's live in textures.ts)
@@ -137,7 +212,36 @@ function limb(scene: Phaser.Scene, key: string, w: number, h: number, outer: num
   });
 }
 
+/** Neutral prototype rig (no character likeness) sized from the def's dims. */
+function buildMannequin(scene: Phaser.Scene, def: CharacterDef) {
+  const T = (p: string) => `${def.tex}_${p}`;
+  const acc = Phaser.Display.Color.HexStringToColor(def.accent).color;
+  const D = def.dims;
+  const part = (key: string, [w, h]: [number, number], stripe: boolean) =>
+    tex(scene, T(key), w + 2, h + 2, (g) => {
+      g.fillStyle(0x3a4048).fillRoundedRect(0, 0, w + 2, h + 2, Math.min(8, (w + 2) / 2));
+      g.fillStyle(0x8a929c).fillRoundedRect(2, 2, w - 2, h - 2, Math.min(7, (w - 2) / 2));
+      g.fillStyle(0xffffff, 0.18).fillRect(3, 3, Math.max(2, (w - 2) / 3), h - 4);
+      if (stripe) g.fillStyle(acc).fillRect(2, h * 0.45, w - 2, 4);
+      g.fillStyle(0x50565e).fillCircle((w + 2) / 2, Math.min(w, h) / 2.5, Math.min(w, h) / 5);
+    });
+  part("torso", D.torso, true);
+  part("uarm", D.uarm, false);
+  part("farm", D.farm, true);
+  part("thigh", D.thigh, false);
+  part("shin", D.shin, true);
+  const r = D.head;
+  tex(scene, T("head"), r * 2 + 6, r * 2 + 6, (g) => {
+    g.fillStyle(0x3a4048).fillCircle(r + 3, r + 3, r + 2);
+    g.fillStyle(0x8a929c).fillCircle(r + 3, r + 3, r);
+    g.fillStyle(0xffffff, 0.2).fillCircle(r - 2, r - 3, r * 0.45);
+    g.fillStyle(0x1a1d22).fillRoundedRect(r * 0.45, r * 0.85, r * 1.5, r * 0.45, 3); // visor
+    g.fillStyle(acc).fillRect(r * 0.55, r * 0.98, r * 1.3, r * 0.18);
+  });
+}
+
 export function buildCharacterTextures(scene: Phaser.Scene) {
+  for (const d of IMPORTED) buildMannequin(scene, d);
   // ---------------- THE DIVA ----------------
   tex(scene, "d_torso", 34, 48, (g) => {
     g.fillStyle(0x2a1030).fillRoundedRect(0, 0, 34, 48, 12);
@@ -268,6 +372,31 @@ export function buildCharacterTextures(scene: Phaser.Scene) {
     g.fillStyle(0x1a1d22).fillRoundedRect(0, 24, 26, 12, 4); // tread boot
     g.fillStyle(0x4a5560);
     for (let x = 3; x < 24; x += 5) g.fillRect(x, 32, 3, 3);
+  });
+
+  // ---------------- imported-character ability props (generic shapes) ----------------
+  tex(scene, "axe", 56, 40, (g) => {
+    g.fillStyle(0x5a3a22).fillRoundedRect(0, 17, 40, 6, 3); // handle (pointing -x)
+    g.fillStyle(0x2a1a10).fillRect(6, 17, 3, 6).fillRect(16, 17, 3, 6);
+    g.fillStyle(0x9aa8b4).fillPoints([V(34, 2), V(54, 8), V(56, 32), V(34, 38), V(40, 20)], true); // blade
+    g.fillStyle(0xcfe8ff).fillPoints([V(50, 7), V(56, 8), V(56, 32), V(50, 33), V(53, 20)], true); // frost edge
+    g.fillStyle(0x6ad0ff).fillCircle(44, 14, 1.8).fillCircle(44, 26, 1.8).fillCircle(47, 20, 1.8); // runes
+  });
+  tex(scene, "airball", 48, 48, (g) => {
+    g.fillStyle(0xffffff, 0.12).fillCircle(24, 24, 22);
+    g.lineStyle(4, 0xffffff, 0.9).strokeCircle(24, 24, 18);
+    g.lineStyle(2, 0x9fe8ff, 0.8).strokeCircle(24, 24, 11);
+  });
+  tex(scene, "rotor", 64, 22, (g) => {
+    g.fillStyle(0xffc83d).fillEllipse(32, 6, 62, 8); // blades
+    g.fillStyle(0xd09a20).fillRect(30, 4, 4, 14); // mast
+    g.fillStyle(0x6b4a2a).fillCircle(32, 19, 3);
+  });
+  tex(scene, "door", 52, 92, (g) => {
+    g.fillStyle(0x7a3a5a).fillRoundedRect(0, 0, 52, 92, 4); // frame
+    g.fillStyle(0xff7ab8).fillRoundedRect(5, 5, 42, 85, 3); // panel
+    g.lineStyle(2, 0xd05a90).strokeRoundedRect(10, 12, 32, 30, 3).strokeRoundedRect(10, 50, 32, 32, 3);
+    g.fillStyle(0xffd060).fillCircle(39, 48, 3.5); // knob
   });
 
   // ---------------- specials ----------------

@@ -82,7 +82,17 @@ export class Goblin {
   /** torso-center height above ground when standing */
   stand: number;
   airJumpsLeft = 0;
-  specialCd = 0;
+  /** per-ability-slot cooldowns (slot 0 = the F special) */
+  cds = [0, 0, 0];
+  get specialCd() {
+    return this.cds[0];
+  }
+  set specialCd(v: number) {
+    this.cds[0] = v;
+  }
+  dmgTakenMul = 1; // Spartan Rage
+  speedMul = 1; // Spartan Rage
+  frozenT = 0; // Anywhere Door transit: no input, no motion
   domeT = 0; // Gremlin dome: invulnerable while > 0
   private jumpHeld = false;
 
@@ -155,6 +165,32 @@ export class Goblin {
     this.scanRing = scene.add.graphics().setDepth(30).setVisible(false);
   }
 
+  /** every physics body that belongs to the fighter, including equipped weapon chains */
+  allBodies(): Body[] {
+    const out = this.parts.map((p) => p.body as Body);
+    for (const c of this.comps.values()) for (const i of c.imgs) out.push(i.body as Body);
+    return out;
+  }
+
+  /** rigid teleport: shift every body by the same delta and kill momentum */
+  teleportBy(dx: number, dy: number) {
+    for (const b of this.allBodies()) {
+      MB.setPosition(b, { x: b.position.x + dx, y: b.position.y + dy });
+      MB.setVelocity(b, { x: 0, y: 0 });
+      MB.setAngularVelocity(b, 0);
+    }
+  }
+
+  hidden = false;
+
+  setHidden(hidden: boolean, alpha = 1) {
+    this.hidden = hidden;
+    const objs: Phaser.GameObjects.Components.Alpha[] = [...this.parts];
+    for (const c of this.comps.values()) objs.push(...c.imgs, ...c.sprites);
+    for (const o of objs) o.setAlpha(hidden ? 0 : alpha);
+    for (const c of this.comps.values()) c.gfx?.setVisible(!hidden);
+  }
+
   backParts() {
     return [this.uarmL, this.farmL, this.thighL, this.shinL];
   }
@@ -202,7 +238,12 @@ export class Goblin {
     this.jumpCd -= dt;
     this.invuln -= dt;
     this.stun = Math.max(0, this.stun - dt);
-    this.specialCd = Math.max(0, this.specialCd - dt);
+    for (let i = 0; i < this.cds.length; i++) this.cds[i] = Math.max(0, this.cds[i] - dt);
+    if (this.frozenT > 0) {
+      this.frozenT -= dt;
+      for (const p of this.allBodies()) MB.setVelocity(p, { x: 0, y: 0 });
+      return;
+    }
     this.domeT = Math.max(0, this.domeT - dt);
     const alive = this.hp > 0;
     this.facing = inp.aimX >= this.x ? 1 : -1;
@@ -220,7 +261,7 @@ export class Goblin {
       }
       // ---- horizontal ----
       const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-      const sp = this.def.speed;
+      const sp = this.def.speed * this.speedMul;
       const speed = this.grounded ? sp : this.thrusting ? Math.max(8, sp) : sp * 0.77;
       const accel = this.grounded ? 0.25 : 0.08;
       if (dir !== 0 || this.grounded) MB.setVelocity(t, { x: t.velocity.x + (dir * speed - t.velocity.x) * accel, y: t.velocity.y });
@@ -320,6 +361,7 @@ export class Goblin {
 
   /** per-frame visuals (logic runs per fixed physics step in update) */
   render(time: number) {
+    if (this.hidden) return;
     this.updateComponentVisuals(time);
   }
 
@@ -379,7 +421,7 @@ export class Goblin {
   damage(n: number, fromX: number, knock = 6): number {
     if (this.invuln > 0 || this.hp <= 0 || this.domeT > 0) return 0;
     const armor = this.comps.get("armor_plating");
-    const dmg = n * this.def.armor * (armor ? Math.max(0.45, 1 - 0.18 * armor.params.power) : 1);
+    const dmg = n * this.def.armor * this.dmgTakenMul * (armor ? Math.max(0.45, 1 - 0.18 * armor.params.power) : 1);
     this.hp = Math.max(0, this.hp - dmg);
     this.invuln = 0.25;
     const dir = Math.sign(this.x - fromX) || 1;
